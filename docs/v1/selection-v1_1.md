@@ -1,6 +1,6 @@
 # V1.1 daily selector: exactly 3 alerts per trading day
 
-**Status:** BUILT, not yet validated. Production default stays `selection.mode: signals` (V1) until the holdout gate in §5 passes and the owner approves paper trading.
+**Status:** BUILT; design grid done and configuration FROZEN (§6); holdout pending. Production default stays `selection.mode: signals` (V1) until the holdout gate in §5 passes and the owner approves paper trading.
 **Owner decision D9 (2026-09-25):** "exactly 3 alerts every day". Allowed levers:
 - run 15m + 30m + 1H together;
 - add 5m;
@@ -79,4 +79,17 @@ At 1% planned risk per alert, **3 alerts/day is up to 3% planned risk per day** 
 
 ## 6. Frozen configuration
 
-*Not yet frozen.* Filled in after the design grid, before the holdout run.
+**Frozen 2026-09-25, before any holdout (2022-01-01 onwards) outcome was computed.**
+
+| Item | Value |
+|---|---|
+| Design period | 2015-08-10 → 2021-12-31 (`npm run select:grid`, `--end 2022-01-01T00:00:00Z`; 97.9M ticks) |
+| Design report | [`../backtest/v1_1-design-grid.md`](../backtest/v1_1-design-grid.md) |
+| Chosen by the pre-declared rule (highest expectancy per filled trade) | **`w08_23-imm3-no5`** |
+| Meaning | Slots 08–13 / 13–18 / 18–23 Dubai; send immediately at score ≥ 3; timeframes M15, M30, H1 (no M5) |
+| Config hash | `sha256:d337d52c53838c287b49b61c700ac05a2031b22a1a67649853b42f90d3cb47aa` |
+| Design result | −0.13R per filled trade [−0.18, −0.09] (n=2,882), +2R share 28% [26%, 29%], fill rate 59% |
+
+**Design-period observation, recorded before the holdout:** all 12 configurations are negative, with intervals entirely below 0. By tier, only Tier A (full V1 confluence) is not negative: +0.10R [−0.09, +0.30], n=196. Tiers B/C/D are each negative with intervals below 0. Nothing is changed in response; the holdout runs the frozen configuration as declared.
+
+**Holdout command (run once):** `npm run select:holdout -- --variant w08_23-imm3-no5`
