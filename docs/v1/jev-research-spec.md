@@ -1,0 +1,143 @@
+# Jev research: role and validation test (proposed D11)
+
+**Status: PROPOSED, awaiting owner approval.** Nothing here changes V1: Jev stays **outside the V1 decision path** (context-V1 §28, CLAUDE.md) until this test passes **and** the owner approves the next phase.
+
+**References** (patterns only; no code, thresholds or strategies are copied), cited from the owner's review of the gist `drillan/6916b16e…`:
+- `buberlo/jev-trader`: feature engine → atomic judgments → deterministic policy → calibration log;
+- `Gamma-Software/jev-signals-lab`: one snapshot → a battery of independent questions → a rule engine in code.
+
+The gist found no forex projects, so there is no reference implementation to adopt.
+
+**Why this matters now:**
+- **No edge in the rules alone:** Ahmad's full setup alone (D10) is −0.17R per filled trade over 2015–2026 (`docs/backtest/full-setup-only.md`).
+- **What Jev must do:** it can only help if it **discriminates** between setups that go on to work and setups that fail. This test measures exactly that before Jev influences anything.
+
+## 1. Jev's exact role
+
+| Jev **does** | Jev **never does** |
+|---|---|
+| Answer a fixed battery of atomic, typed questions about a compact state snapshot that **our code** computes | Decide BUY / NO BUY in V1 |
+| Return typed outputs (probability, score or choice) that are logged with the decision | Set entry, stop, lots, risk or timing |
+| (Phase B only, if validated) feed a **deterministic policy in code**, e.g. a veto threshold fixed in advance | Place, modify or cancel orders |
+| | See raw dates, absolute prices, account data or anything after the snapshot |
+| | Appear in the trader's email before validation. An unvalidated "confidence 0.87" would mislead. |
+
+The flow is **"Jev judges, code executes"**:
+
+```
+ticks → candles → V1 engine (EMA50/200, RSI, pullback, candle)          code
+      → compact state snapshot (§2)                                     code
+      → Jev: question battery (§3), typed answers                       Jev
+      → log (snapshot, answers, V1 decision, model/prompt versions)     code
+      → [Phase B only] deterministic policy on the answers              code
+      → outcome labelled later from ticks (§4)                          code
+```
+
+## 2. Compact state snapshot (computed by code, versioned)
+
+The snapshot uses relative, unit-free features only. There are **no timestamps, dates or absolute price levels**. That limits anchoring and memorisation, and makes every sample comparable.
+- **Timeframe** and **session bucket** (Asia / London / London–NY overlap / NY), derived from time but not revealing the date.
+- **Trend:**
+  - EMA50−EMA200 and close−EMA50, in pips and in units of recent range;
+  - EMA50 slope over 5 and 20 candles.
+- **Pullback:**
+  - distance from the low to EMA50, in pips and as a fraction of the touch tolerance;
+  - size of the prior swing, and how many candles ago it happened.
+- **Momentum:** RSI now, RSI 1 and 5 candles ago, and the minimum RSI over the lookback.
+- **Candle:** body/range, lower-wick/range and upper-wick/range for candles i and i−1, plus the pattern flags.
+- **Volatility and cost:**
+  - the mean range of the last 20 candles, in pips;
+  - the current spread, in pips.
+- **V1 context:** which of the 4 rules pass (score and tier). The planned entry and stop are given as distances in pips.
+
+The snapshot schema gets a `snapshotVersion`. Any change to it restarts the test clock (§5).
+
+## 3. Question battery (fixed wording, versioned by `promptHash`)
+
+Every question is independent and asked separately, so one answer can't anchor another.
+
+| ID | Question (paraphrased; exact text frozen at launch) | Type |
+|---|---|---|
+| Q1 | Probability that price reaches **entry + 2R before entry − 1R**, where R = the planned stop distance, for a long entered at the planned Buy Limit | probability 0–1 (**primary**) |
+| Q2 | Is the uptrend likely to continue over the next 8 candles? | probability |
+| Q3 | Is the pullback exhausted (sellers losing control)? | probability |
+| Q4 | Market regime | choice: trending / ranging / volatile-choppy |
+| Q5 | Is momentum confirming or diverging? | choice: confirming / neutral / diverging |
+
+- **Only Q1 is primary evidence;** Q2–Q5 are exploratory.
+- **Settings:** temperature, or its equivalent, as deterministic as the API allows.
+- **Logged every time:** model identifier, `promptHash`, `snapshotVersion` and the raw responses.
+- **No tools:** Jev gets no browsing, search or other tools, so it can't look up what happened.
+
+## 4. The validation test (pre-registered)
+
+**Population:** every in-window candle on **M30 and H1** with a valid V1 trade plan (tiers A–D), plus every **tier-A** candle on M5/M15.
+- About 30–50 samples per trading day. This gives enough samples in weeks rather than years; tier A alone would give about 1 per day, far too few.
+- Configurable sampling is available if cost requires it.
+
+**Data:** only candles **after Jev's knowledge cutoff**.
+- **The primary window starts on the day this spec is approved** (at the latest; ideally no earlier than 2026-10-01).
+- **Earlier candles are excluded:** any candle from before that date may be in Jev's training data and **can never count as evidence**. That rules out every backtest on 2015–2026.
+- **Scoring can be done later in batches** from monthly Exness tick downloads. Candles after the cutoff are unknown to Jev whenever they're scored. No live feed is needed for the research phase.
+
+**Label, computed by code from ticks, independent of Jev:** the V1 Buy Limit execution model (spec §11).
+- The outcome is `target` (+2R first), `stop` (−1R first) or `open`.
+- Unfilled plans are excluded from the primary metric and reported separately.
+- A secondary label, a market entry at close, is reported as a diagnostic.
+
+**Baselines Jev must beat:**
+1. **Base rate:** a constant equal to the observed target share.
+2. **Simple statistical model:** logistic regression on the same snapshot features, fitted on **2015–2021 only** and frozen at launch. If Jev can't beat a 20-line model, it adds nothing.
+
+**Duration and sample size:** at least **3 calendar months and at least 1,500 labelled (filled, resolved) samples**, whichever comes later.
+- Interim reports cover operational health only: latency, errors and cost.
+- **No metric-based early stopping or peeking-driven changes.**
+
+**Primary metrics (Q1), with intervals from a day-block bootstrap** (samples on the same day are correlated):
+| Metric | What it measures |
+|---|---|
+| **AUC** of Q1 vs target/stop | Discrimination: do higher probabilities go with more wins? |
+| **Brier skill score** vs the base rate, and vs logistic regression | Accuracy of probabilities beyond the baselines |
+| **ECE + reliability diagram** | Calibration: does "0.4" mean about 40%? |
+| **Top-tercile vs bottom-tercile expectancy (R)** | Economic relevance |
+
+**PASS (all required):**
+1. AUC 95% lower bound > **0.52**, and Jev's AUC > the logistic baseline's, with the bootstrap interval of the difference entirely above 0.
+2. Brier skill score vs the base rate: lower bound > 0.
+3. Top-tercile minus bottom-tercile expectancy: interval entirely above 0.
+4. Same sign of (3) in at least 2 of the 3 months, so it's not driven by a single month.
+
+**FAIL:** Jev remains a logged, unused column, or is dropped. **No threshold tuning on the test data.**
+
+## 5. After the test
+
+| Phase | What happens | Evidence needed |
+|---|---|---|
+| **A — Shadow (this spec)** | Jev scores and everything is logged. No influence, and nothing shown to the trader. | — |
+| **B — Policy design** | If A passes, design **one** deterministic policy, e.g. "send a tier-A alert only if Q1 ≥ x". x is chosen on phase-A data and frozen in git. | Phase A PASS |
+| **C — Policy test** | Run the frozen policy on **new** forward data (≥ 3 months), vs V1 without Jev: Buy Limit expectancy and frequency, as D7/D8 require. | New data only |
+| **D — Owner decision** | Show Jev's output in emails, and/or use the veto live. | Phase C result |
+
+Any change to the model version, `promptHash`, `snapshotVersion`, question set or population **restarts the clock**.
+
+## 6. What we are deliberately not taking from the referenced projects
+- High-frequency Jev calls and order-book logic;
+- Avellaneda–Stoikov pricing and Kelly sizing;
+- autonomous execution;
+- multi-asset or platform infrastructure (e.g. QuantDinger as a whole).
+
+These solve different problems.
+
+## 7. Needed from the owner before implementation
+1. **Approve D11** (this spec), including the start date of the primary window.
+2. **Jev access:** API key, pricing and rate limits, and the documented **training/knowledge cutoff**. The start date must be after it.
+3. **A cost budget per month.** At about 40 samples/day × 5 questions, that is about 4,000 calls/month; Q1 alone is about 800.
+4. **A monthly Exness tick export** from the start date onwards, or the live data provider decision, if real-time scoring is wanted.
+
+## 8. Implementation outline (once approved)
+- `src/jev/snapshot.ts`: pure function from (Series, i, Decision) to Snapshot, with a unit-tested `snapshotVersion`.
+- `src/jev/client.ts`: a `JevJudge` interface. The real client plus a deterministic fake for tests. It is written against the actual API once access is provided; no API details are assumed here.
+- `src/jev/log.ts`: an append-only JSONL log of snapshot, answers, versions and V1 decision.
+- `scripts/jev-score.ts`: batch-scores post-cutoff candles.
+- `scripts/jev-evaluate.ts`: joins the log with tick-based labels, computes the §4 metrics and the PASS/FAIL verdict, and writes a report.
+- The logistic baseline is fitted on 2015–2021 by a script, and its coefficients are committed before launch.

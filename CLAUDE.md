@@ -35,6 +35,7 @@ Project context for Claude Code sessions in this repository.
 | `docs/foundation/EUR_USD Entry Strategy Guide.pdf` | Ahmad's original strategy. It is truncated at "Applying the Lot Size Formula:". |
 | `config/v1.yaml` | Every parameter, each tagged with its provenance |
 | `docs/v1/backtest-dataset-2026.md` | The initial backtest dataset: 2026 only, through 2026-09-24, partial year, **preliminary results only**. 2026-09-25 is the loader-validation file only. |
+| `docs/v1/jev-research-spec.md` | **Proposed D11**: Jev's exact role ("Jev judges, code executes"; shadow only) and the pre-registered forward validation test. Historical backtests of Jev are invalid, because 2015–2026 may be in its training data. |
 | `docs/claude_thinking/` | Claude's reviews and reasoning; advisory. `pdf-review.md` lists the PDF errors (P1–P8), `corrected-strategy.md` is the corrected rewrite. **The original PDF and context-V1.md are never edited.** |
 
 ## Hard rules for code
