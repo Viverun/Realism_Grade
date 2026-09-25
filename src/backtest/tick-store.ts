@@ -29,40 +29,47 @@ export interface TickLoadSummary {
 }
 
 /**
- * Columnar, append-only tick storage (time, bid, ask) for backtests: ~16 bytes per tick,
- * so a year of EUR/USD ticks fits comfortably in memory. Times are ascending.
+ * Columnar, append-only tick storage (time, bid, ask) for backtests: ~16 bytes per tick.
+ * Stored in fixed-size chunks, so memory grows in small steps with no large reallocation
+ * copies; a decade of EUR/USD ticks fits in a few GB. Times are ascending.
  */
 export class TickStore {
-  private time = new Float64Array(1 << 20);
-  private bidArr = new Int32Array(1 << 20);
-  private askArr = new Int32Array(1 << 20);
+  private readonly chunkBits: number;
+  private readonly chunkMask: number;
+  private times: Float64Array[] = [];
+  private bids: Int32Array[] = [];
+  private asks: Int32Array[] = [];
   length = 0;
 
+  /** `chunkBits` = log2 of ticks per chunk (default 2^22 ≈ 4.2M ticks ≈ 67 MB). */
+  constructor(chunkBits = 22) {
+    this.chunkBits = chunkBits;
+    this.chunkMask = (1 << chunkBits) - 1;
+  }
+
   push(tick: Tick): void {
-    if (this.length === this.time.length) {
-      const grow = <T extends Float64Array | Int32Array>(a: T, make: (n: number) => T): T => {
-        const next = make(a.length * 2);
-        next.set(a);
-        return next;
-      };
-      this.time = grow(this.time, (n) => new Float64Array(n));
-      this.bidArr = grow(this.bidArr, (n) => new Int32Array(n));
-      this.askArr = grow(this.askArr, (n) => new Int32Array(n));
+    const c = this.length >>> this.chunkBits;
+    if (c === this.times.length) {
+      const size = 1 << this.chunkBits;
+      this.times.push(new Float64Array(size));
+      this.bids.push(new Int32Array(size));
+      this.asks.push(new Int32Array(size));
     }
-    this.time[this.length] = tick.time;
-    this.bidArr[this.length] = tick.bid;
-    this.askArr[this.length] = tick.ask;
+    const o = this.length & this.chunkMask;
+    this.times[c]![o] = tick.time;
+    this.bids[c]![o] = tick.bid;
+    this.asks[c]![o] = tick.ask;
     this.length += 1;
   }
 
   timeAt(k: number): number {
-    return this.time[k]!;
+    return this.times[k >>> this.chunkBits]![k & this.chunkMask]!;
   }
   bid(k: number): number {
-    return this.bidArr[k]!;
+    return this.bids[k >>> this.chunkBits]![k & this.chunkMask]!;
   }
   ask(k: number): number {
-    return this.askArr[k]!;
+    return this.asks[k >>> this.chunkBits]![k & this.chunkMask]!;
   }
 
   /** Index of the first tick with time >= t, or `length` if none. */
@@ -71,27 +78,22 @@ export class TickStore {
     let hi = this.length;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (this.time[mid]! < t) lo = mid + 1;
+      if (this.timeAt(mid) < t) lo = mid + 1;
       else hi = mid;
     }
     return lo;
   }
 
-  /** Rewrites the store in the order given by `permutation` (indices into the current arrays). */
+  /** Rewrites the store in the order given by `permutation` (indices into the current contents). */
   private permute(permutation: Uint32Array): void {
-    const n = this.length;
-    const time = new Float64Array(Math.max(n, 1));
-    const bid = new Int32Array(Math.max(n, 1));
-    const ask = new Int32Array(Math.max(n, 1));
-    for (let k = 0; k < n; k++) {
+    const next = new TickStore(this.chunkBits);
+    for (let k = 0; k < this.length; k++) {
       const j = permutation[k]!;
-      time[k] = this.time[j]!;
-      bid[k] = this.bidArr[j]!;
-      ask[k] = this.askArr[j]!;
+      next.push({ time: this.timeAt(j), bid: this.bid(j), ask: this.ask(j) });
     }
-    this.time = time;
-    this.bidArr = bid;
-    this.askArr = ask;
+    this.times = next.times;
+    this.bids = next.bids;
+    this.asks = next.asks;
   }
 
   /**
@@ -105,8 +107,8 @@ export class TickStore {
     let runs = n > 0 ? 1 : 0;
     const dayRun = new Map<number, number>();
     for (let k = 0; k < n; k++) {
-      if (k > 0 && this.time[k]! < this.time[k - 1]!) runs += 1;
-      const day = Math.floor(this.time[k]! / DAY_MS);
+      if (k > 0 && this.timeAt(k) < this.timeAt(k - 1)) runs += 1;
+      const day = Math.floor(this.timeAt(k) / DAY_MS);
       const seen = dayRun.get(day);
       if (seen === undefined) dayRun.set(day, runs);
       else if (seen !== runs) {
@@ -118,7 +120,8 @@ export class TickStore {
     if (runs <= 1) return { file, ticks: n, runs, reordered: false };
     const index = new Uint32Array(n);
     for (let k = 0; k < n; k++) index[k] = k;
-    const time = this.time;
+    const time = new Float64Array(n);
+    for (let k = 0; k < n; k++) time[k] = this.timeAt(k);
     index.sort((a, b) => time[a]! - time[b]! || a - b);
     this.permute(index);
     return { file, ticks: n, runs, reordered: true };
@@ -130,7 +133,7 @@ export class TickStore {
     range: { startMs?: number; endMs: number },
     dropped: { beforeStart: number; atOrAfterEnd: number; outOfOrder: number },
   ): void {
-    let last = this.length ? this.time[this.length - 1]! : -Infinity;
+    let last = this.length ? this.timeAt(this.length - 1) : -Infinity;
     for (let k = 0; k < other.length; k++) {
       const t = other.timeAt(k);
       if (range.startMs !== undefined && t < range.startMs) dropped.beforeStart += 1;
@@ -144,7 +147,7 @@ export class TickStore {
   }
 
   *ticks(): Generator<Tick> {
-    for (let k = 0; k < this.length; k++) yield { time: this.time[k]!, bid: this.bidArr[k]!, ask: this.askArr[k]! };
+    for (let k = 0; k < this.length; k++) yield { time: this.timeAt(k), bid: this.bid(k), ask: this.ask(k) };
   }
 
   /**

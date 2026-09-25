@@ -75,7 +75,7 @@ At 1% planned risk per alert, **3 alerts/day is up to 3% planned risk per day** 
 **Choice of periods.**
 - **Planned:** design 2015–2021, holdout 2022-01-01 → 2026-09-24, once the owner's 2015–2023 data is added.
 - **Fallback if that data isn't added:** design 2024–2025, holdout 2026.
-- **Caveat:** 2024–2026 has already been used for V1 research (not V1.1). That is a mild contamination, and it is recorded here.
+- **Caveat:** 2024–2026 has already been used for V1 research (not V1.1), including V1 on 5m for 2026 (−0.24R, n=73; `docs/backtest/2026-preliminary.md`). That is a mild contamination of the 2022–2026 holdout, recorded here. The design choice is mechanical (§5 step 2), so this knowledge can't steer it.
 
 ## 6. Frozen configuration
 

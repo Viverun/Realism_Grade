@@ -7,6 +7,7 @@ import type { AppConfig } from '../config/schema.js';
 import { configHash } from '../config/load.js';
 import { pipsToPoints } from '../core/price.js';
 import { TIMEFRAME_MS, TIMEFRAMES, type Timeframe } from '../core/timeframe.js';
+import { makeLocalClock } from '../core/timezone.js';
 import type { Candle } from '../core/types.js';
 import { buildSeries, evaluateIndex, makeEngineContext } from '../strategy/engine.js';
 import { candidatePlan, scoreDecision } from '../strategy/score.js';
@@ -25,6 +26,10 @@ export function buildCandidateStream(candles: Record<Timeframe, readonly Candle[
   const byClose = new Map<number, Candidate[]>();
   const evaluated = { M5: 0, M15: 0, M30: 0, H1: 0 } as Record<Timeframe, number>;
   const hash = configHash(config);
+  // Candidates on non-trading local weekdays can never be selected; skipping them saves memory.
+  const local = makeLocalClock(config.alerts.timezone);
+  const weekdays = new Set(config.selection.weekdays);
+  const tradingDay = (ms: number): boolean => weekdays.has(new Date(`${local(ms).date}T00:00:00Z`).getUTCDay());
   for (const tf of timeframes) {
     const ctx = makeEngineContext(config, tf, hash);
     const series = buildSeries(candles[tf], ctx);
@@ -32,6 +37,7 @@ export function buildCandidateStream(candles: Record<Timeframe, readonly Candle[
       const decision = evaluateIndex(series, i, ctx);
       if (decision.status === 'warmup') continue;
       evaluated[tf] += 1;
+      if (!tradingDay(decision.closeTime)) continue;
       const plan = candidatePlan(series, i, decision, ctx);
       if (!plan) continue;
       const candidate: Candidate = { decision, scored: scoreDecision(decision), plan, tfRank: TIMEFRAMES.indexOf(tf) };

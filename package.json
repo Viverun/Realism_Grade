@@ -16,7 +16,10 @@
     "backtest": "tsx scripts/backtest.ts",
     "backtest:2026": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2026-preliminary.md --json data/backtest/2026-preliminary.json --title 'Preliminary backtest: EUR/USD 2026-01-01 to 2026-09-24 (partial year)'",
     "backtest:all": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025*.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2024-2026.md --json data/backtest/2024-2026.json --title 'Backtest: EUR/USD 2024-01 to 2026-09-24'",
-    "select:frequency": "tsx scripts/select-backtest.ts docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025*.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --mode frequency --out docs/backtest/v1_1-frequency.md"
+    "select:frequency": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/select-backtest.ts docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[0-3]*.zip docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025_??.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --mode frequency --out docs/backtest/v1_1-frequency.md",
+    "select:grid": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/select-backtest.ts docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[01]*.zip --end 2022-01-01T00:00:00Z --mode grid --out docs/backtest/v1_1-design-grid.md",
+    "select:holdout": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/select-backtest.ts docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[0-3]*.zip docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025_??.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --mode holdout --holdout-start 2022-01-01T00:00:00Z --out docs/backtest/v1_1-holdout.md",
+    "validate:2015-2023": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/validate-ticks.ts docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[0-3]*.zip --out docs/claude_thinking/tick-data-validation-2015-2023.md"
   },
   "dependencies": {
     "yaml": "^2.9.1",

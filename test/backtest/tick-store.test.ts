@@ -27,8 +27,23 @@ describe('TickStore', () => {
     expect(store.firstAtOrAfter(t('2026-09-26T00:00:00Z'))).toBe(2);
   });
 
-  it('grows past its initial capacity and builds valid candles', () => {
-    const store = new TickStore();
+  it('spans many chunks transparently (small chunks for the test)', () => {
+    const st = new TickStore(4); // 16 ticks per chunk
+    const start = Date.parse('2026-09-21T00:00:00Z');
+    for (let k = 0; k < 1000; k++) st.push({ time: start + k * 1000, bid: 100_000 + k, ask: 100_008 + k });
+    expect(st.length).toBe(1000);
+    expect([st.timeAt(0), st.bid(17), st.ask(999)]).toEqual([start, 100_017, 101_007]);
+    expect(st.firstAtOrAfter(start + 500_500)).toBe(501);
+    // normaliseOrder across chunk boundaries
+    const swapped = new TickStore(4);
+    for (let k = 0; k < 40; k++) swapped.push({ time: start + 86_400_000 + k, bid: 1, ask: 2 }); // day 2 first
+    for (let k = 0; k < 40; k++) swapped.push({ time: start + k, bid: 3, ask: 4 }); // then day 1
+    expect(swapped.normaliseOrder('f')).toMatchObject({ runs: 2, reordered: true });
+    expect([swapped.timeAt(0), swapped.bid(0), swapped.timeAt(79), swapped.bid(79)]).toEqual([start, 3, start + 86_400_039, 1]);
+  });
+
+  it('grows past one chunk and builds valid candles', () => {
+    const store = new TickStore(18);
     const start = Date.parse('2026-09-21T00:00:00Z');
     for (let k = 0; k < (1 << 20) + 10; k++) store.push({ time: start + k * 100, bid: 113_600 + (k % 50), ask: 113_608 + (k % 50) });
     expect(store.length).toBe((1 << 20) + 10);

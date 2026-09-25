@@ -4,17 +4,18 @@
 
 > **Evidence hierarchy (owner decision, 2026-09-25):** the **Buy Limit** results are the **primary evidence** for timeframe and strategy decisions, because production V1 is Buy Limit only. The PDF market-entry baseline is a **secondary diagnostic** (§ Secondary diagnostic) and is never used on its own to choose a timeframe or strategy.
 
-Generated 2026-09-25 by `scripts/backtest.ts`. Default config hash `sha256:8bdcb072d109385d95581f72843b0a6c34d1c446d6449b41cf7555ab7acca351`.
+Generated 2026-09-25 by `scripts/backtest.ts`. Default config hash `sha256:96bc60da41383f0528b46fe4084ed449a1277a2e9bfc6f02d74ed45ee56bc409`.
 
 ## Dataset
 
 - **Files (9):** `Exness_EURUSD_2026_01.zip`, `Exness_EURUSD_2026_02.zip`, `Exness_EURUSD_2026_03.zip`, `Exness_EURUSD_2026_04.zip`, `Exness_EURUSD_2026_05.zip`, `Exness_EURUSD_2026_06.zip`, `Exness_EURUSD_2026_07.zip`, `Exness_EURUSD_2026_08.zip`, `Exness_EURUSD_2026_09.zip`
 - **Ticks used:** 9,173,272, 2026-01-01T22:05:12.755Z → 2026-09-24T23:59:48.942Z (UTC), about 8.7 months. End cut-off (exclusive): **2026-09-25T00:00:00Z**.
 - **Dropped:** 0 at/after the cut-off, 0 before start, 0 out-of-order/overlapping.
-- **Candles:** M15 18,251, M30 9,126, H1 4,563 (Bid OHLC, closed candles only). The first 1000 candles of each timeframe only seed the indicators.
+- **Candles:** M5 54,690, M15 18,251, M30 9,126, H1 4,563 (Bid OHLC, closed candles only). The first 1000 candles of each timeframe only seed the indicators.
 
 | Timeframe | First evaluated candle (UTC open) | Last evaluated candle | Evaluated candles | Trading days in window |
 |---|---|---|---|---|
+| M5 | 2026-01-07T09:30Z | 2026-09-24T23:55Z | 53,690 | 187 |
 | M15 | 2026-01-16T08:00Z | 2026-09-24T23:45Z | 17,251 | 180 |
 | M30 | 2026-01-30T18:00Z | 2026-09-24T23:30Z | 8,126 | 170 |
 | H1 | 2026-03-02T14:00Z | 2026-09-24T23:00Z | 3,563 | 149 |
@@ -37,30 +38,30 @@ Outcome definitions:
 - **Per alert:** the same, but counting unfilled alerts as 0 R.
 - Brackets are **95% intervals**.
 
-| Metric | M15 | M30 | H1 |
-|---|---|---|---|
-| **Frequency** |  |  |  |
-| Trading days evaluated | 180 | 170 | 149 |
-| Signals per trading day | 0.32 | 0.14 | 0.05 |
-| Emailed alerts per week | 1.44 | 0.68 | 0.27 |
-| Filled trades per week | 0.67 | 0.44 | 0.17 |
-| **Funnel** |  |  |  |
-| Signals → emailed | 58 → 52 | 23 → 23 | 8 → 8 |
-| Rejected at send (entry ≥ Ask) / cooldown / capped | 0 / 6 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
-| Invalid at placement / expired / filled | 7 / 21 / 24 | 1 / 7 / 15 | 1 / 2 / 5 |
-| Fill rate (of emailed) | 46.2% | 65.2% | 62.5% |
-| **Outcomes (filled trades)** |  |  |  |
-| +2R first / −1R first / unresolved | 3 / 21 / 0 | 5 / 10 / 0 | 2 / 2 / 1 |
-| +2R share of resolved | 13% [4%, 31%] (n=24) | 33% [15%, 58%] (n=15) | 50% [15%, 85%] (n=4) |
-| Expectancy, R per filled trade | -0.63 [-1.04, -0.22] (n=24) | 0.00 [-0.75, 0.74] (n=15) | 0.51 [-0.81, 1.82] (n=5) |
-| Expectancy, R per emailed alert | -0.29 [-0.50, -0.09] (n=52) | 0.00 [-0.48, 0.48] (n=23) | 0.32 [-0.49, 1.12] (n=8) |
-| Stop distance, pips (median / mean) | 8.4 / 8.8 (n=24) | 10.3 / 11.2 (n=15) | 17.6 / 25.7 (n=5) |
-| Realized R on stops (median / mean) | -1.00 / -1.01 (n=21) | -1.01 / -1.01 (n=10) | -1.00 / -1.00 (n=2) |
-| Stops that slipped / max slippage (pips) | 10 / 0.2 | 5 / 0.3 | 0 / 0.0 |
-| Lots (median), raised to min lot | 0.11, 0 | 0.10, 0 | 0.04, 0 |
-| **Signal mix** |  |  |  |
-| RSI branch (recovery / above-mid) | 6 / 52 | 1 / 22 | 0 / 8 |
-| Pattern (pin / engulfing / both) | 21 / 37 / 0 | 3 / 20 / 0 | 1 / 7 / 0 |
+| Metric | M5 | M15 | M30 | H1 |
+|---|---|---|---|---|
+| **Frequency** |  |  |  |  |
+| Trading days evaluated | 187 | 180 | 170 | 149 |
+| Signals per trading day | 1.02 | 0.32 | 0.14 | 0.05 |
+| Emailed alerts per week | 4.14 | 1.44 | 0.68 | 0.27 |
+| Filled trades per week | 1.95 | 0.67 | 0.44 | 0.17 |
+| **Funnel** |  |  |  |  |
+| Signals → emailed | 190 → 155 | 58 → 52 | 23 → 23 | 8 → 8 |
+| Rejected at send (entry ≥ Ask) / cooldown / capped | 0 / 17 / 18 | 0 / 6 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Invalid at placement / expired / filled | 29 / 53 / 73 | 7 / 21 / 24 | 1 / 7 / 15 | 1 / 2 / 5 |
+| Fill rate (of emailed) | 47.1% | 46.2% | 65.2% | 62.5% |
+| **Outcomes (filled trades)** |  |  |  |  |
+| +2R first / −1R first / unresolved | 18 / 54 / 1 | 3 / 21 / 0 | 5 / 10 / 0 | 2 / 2 / 1 |
+| +2R share of resolved | 25% [16%, 36%] (n=72) | 13% [4%, 31%] (n=24) | 33% [15%, 58%] (n=15) | 50% [15%, 85%] (n=4) |
+| Expectancy, R per filled trade | -0.24 [-0.54, 0.06] (n=73) | -0.63 [-1.04, -0.22] (n=24) | 0.00 [-0.75, 0.74] (n=15) | 0.51 [-0.81, 1.82] (n=5) |
+| Expectancy, R per emailed alert | -0.11 [-0.26, 0.03] (n=155) | -0.29 [-0.50, -0.09] (n=52) | 0.00 [-0.48, 0.48] (n=23) | 0.32 [-0.49, 1.12] (n=8) |
+| Stop distance, pips (median / mean) | 5.7 / 6.8 (n=73) | 8.4 / 8.8 (n=24) | 10.3 / 11.2 (n=15) | 17.6 / 25.7 (n=5) |
+| Realized R on stops (median / mean) | -1.00 / -1.01 (n=54) | -1.00 / -1.01 (n=21) | -1.01 / -1.01 (n=10) | -1.00 / -1.00 (n=2) |
+| Stops that slipped / max slippage (pips) | 13 / 2.0 | 10 / 0.2 | 5 / 0.3 | 0 / 0.0 |
+| Lots (median), raised to min lot | 0.16, 0 | 0.11, 0 | 0.10, 0 | 0.04, 0 |
+| **Signal mix** |  |  |  |  |
+| RSI branch (recovery / above-mid) | 0 / 190 | 6 / 52 | 1 / 22 | 0 / 8 |
+| Pattern (pin / engulfing / both) | 30 / 160 / 0 | 21 / 37 / 0 | 3 / 20 / 0 | 1 / 7 / 0 |
 
 ### By year — Buy Limit, default
 
@@ -68,6 +69,7 @@ Stability check: a timeframe whose result depends on one year is weaker evidence
 
 | Timeframe | Year | Trading days | Signals | Emailed | Filled | +2R / −1R / open | +2R share | Expectancy R / filled trade |
 |---|---|---|---|---|---|---|---|---|
+| M5 | 2026 | 187 | 190 | 155 | 73 | 18 / 54 / 1 | 25% [16%, 36%] (n=72) | -0.24 [-0.54, 0.06] (n=73) |
 | M15 | 2026 | 180 | 58 | 52 | 24 | 3 / 21 / 0 | 13% [4%, 31%] (n=24) | -0.63 [-1.04, -0.22] (n=24) |
 | M30 | 2026 | 170 | 23 | 23 | 15 | 5 / 10 / 0 | 33% [15%, 58%] (n=15) | 0.00 [-0.75, 0.74] (n=15) |
 | H1 | 2026 | 149 | 8 | 8 | 5 | 2 / 2 / 1 | 50% [15%, 85%] (n=4) | 0.51 [-0.81, 1.82] (n=5) |
@@ -76,11 +78,20 @@ Stability check: a timeframe whose result depends on one year is weaker evidence
 
 | Timeframe | In window | + Trend | + Pullback | + RSI | + Candle (signal) | Trend alone | Pullback alone | RSI alone | Candle alone |
 |---|---|---|---|---|---|---|---|---|---|
+| M5 | 33,780 | 9884 | 2715 | 1238 | 190 | 29.3% | 28.8% | 35.5% | 7.6% |
 | M15 | 10,963 | 3107 | 861 | 393 | 58 | 28.3% | 34.8% | 36.3% | 7.8% |
 | M30 | 5,241 | 1420 | 428 | 193 | 23 | 27.1% | 32.2% | 35.2% | 7.7% |
 | H1 | 2,373 | 608 | 184 | 72 | 8 | 25.6% | 33.9% | 34.1% | 7.5% |
 
 ### Post-fill price movement (default Buy Limit), pips — median / mean
+
+**M5**
+
+| Horizon (candles) | Return | MFE | MAE |
+|---|---|---|---|
+| 12 | 0.3 / 0.3 (n=73) | 4.4 / 7.3 (n=73) | 6.5 / 7.7 (n=73) |
+| 48 | -1.9 / 1.0 (n=73) | 9.9 / 14.1 (n=73) | 9.6 / 13.0 (n=73) |
+| 288 | -5.4 / 0.5 (n=73) | 17.0 / 28.6 (n=73) | 22.6 / 29.4 (n=73) |
 
 **M15**
 
@@ -109,6 +120,20 @@ Stability check: a timeframe whose result depends on one year is weaker evidence
 ## Buy Limit variants (one change at a time)
 
 Sensitivity only. With these sample sizes, differences inside overlapping intervals are noise, and choosing the best-looking variant would overfit.
+
+### M5
+
+| Variant | Signals | Emailed / week | Filled | Fill rate | +2R / −1R / open | +2R share | Expectancy R / filled trade |
+|---|---|---|---|---|---|---|---|
+| default | 190 | 4.14 | 73 | 47.1% | 18 / 54 / 1 | 25% [16%, 36%] (n=72) | -0.24 [-0.54, 0.06] (n=73) |
+| rsi_oversold_30 | 190 | 4.14 | 73 | 47.1% | 18 / 54 / 1 | 25% [16%, 36%] (n=72) | -0.24 [-0.54, 0.06] (n=73) |
+| rsi_recovery_only | 0 | 0.00 | 0 | — | 0 / 0 / 0 | — | — |
+| rsi_above_mid_only | 190 | 4.14 | 73 | 47.1% | 18 / 54 / 1 | 25% [16%, 36%] (n=72) | -0.24 [-0.54, 0.06] (n=73) |
+| touch_tol_x0.5 | 164 | 3.74 | 66 | 47.1% | 16 / 49 / 1 | 25% [16%, 36%] (n=65) | -0.25 [-0.56, 0.07] (n=66) |
+| touch_tol_x2 | 285 | 5.72 | 97 | 45.3% | 24 / 73 / 0 | 25% [17%, 34%] (n=97) | -0.29 [-0.55, -0.02] (n=97) |
+| entry_candle_mid | 190 | 4.14 | 46 | 29.7% | 10 / 36 / 0 | 22% [12%, 36%] (n=46) | -0.36 [-0.72, 0.01] (n=46) |
+| cooldown_0 | 190 | 4.36 | 73 | 44.8% | 19 / 53 / 1 | 26% [18%, 38%] (n=72) | -0.20 [-0.50, 0.11] (n=73) |
+| cooldown_6 | 190 | 3.96 | 73 | 49.3% | 19 / 53 / 1 | 26% [18%, 38%] (n=72) | -0.20 [-0.50, 0.11] (n=73) |
 
 ### M15
 
@@ -170,6 +195,8 @@ Same signals, but entered as the PDF describes: a market buy at the next open, f
 
 | Timeframe | Entry | Filled | +2R / −1R / open | +2R share | Expectancy R / filled trade |
 |---|---|---|---|---|---|
+| M5 | Buy Limit (primary) | 73 | 18 / 54 / 1 | 25% [16%, 36%] (n=72) | -0.24 [-0.54, 0.06] (n=73) |
+| M5 | PDF market (diagnostic) | 155 | 40 / 109 / 6 | 27% [20%, 34%] (n=149) | -0.17 [-0.38, 0.04] (n=154) |
 | M15 | Buy Limit (primary) | 24 | 3 / 21 / 0 | 13% [4%, 31%] (n=24) | -0.63 [-1.04, -0.22] (n=24) |
 | M15 | PDF market (diagnostic) | 52 | 14 / 37 / 1 | 27% [17%, 41%] (n=51) | -0.19 [-0.55, 0.18] (n=52) |
 | M30 | Buy Limit (primary) | 15 | 5 / 10 / 0 | 33% [15%, 58%] (n=15) | 0.00 [-0.75, 0.74] (n=15) |
@@ -178,6 +205,26 @@ Same signals, but entered as the PDF describes: a market buy at the next open, f
 | H1 | PDF market (diagnostic) | 8 | 1 / 3 / 4 | 25% [5%, 70%] (n=4) | -0.05 [-0.78, 0.69] (n=8) |
 
 ## Most recent emailed alerts (default, per timeframe)
+
+### M5 (155 emailed; last 15 shown)
+
+| Signal close (Dubai) | Pattern | RSI | Entry | Rec. stop | Lots | Planned risk | Execution | Result | R |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-13 18:40 | pin_bar | above_mid | 1.15397 | 1.15338 | 0.16 | $9.44 | expired | — | — |
+| 2026-08-14 20:20 | engulfing | above_mid | 1.15783 | 1.15737 | 0.20 | $10.00 | expired | — | — |
+| 2026-08-17 10:30 | engulfing | above_mid | 1.15914 | 1.15825 | 0.11 | $9.79 | invalid_at_placement | — | — |
+| 2026-08-18 20:05 | engulfing | above_mid | 1.15798 | 1.15766 | 0.20 | $10.00 | expired | — | — |
+| 2026-08-19 22:35 | engulfing | above_mid | 1.16657 | 1.16584 | 0.13 | $9.49 | expired | — | — |
+| 2026-08-20 19:30 | engulfing | above_mid | 1.16841 | 1.16747 | 0.10 | $9.40 | filled | stop | -1.02 |
+| 2026-08-21 10:20 | engulfing | above_mid | 1.16935 | 1.16900 | 0.20 | $10.00 | filled | stop | -1.00 |
+| 2026-08-21 11:35 | engulfing | above_mid | 1.16951 | 1.16880 | 0.14 | $9.94 | filled | stop | -1.03 |
+| 2026-08-21 15:15 | engulfing | above_mid | 1.17033 | 1.16984 | 0.20 | $10.00 | expired | — | — |
+| 2026-08-25 18:50 | engulfing | above_mid | 1.16725 | 1.16653 | 0.13 | $9.36 | invalid_at_placement | — | — |
+| 2026-08-25 19:10 | pin_bar | above_mid | 1.16703 | 1.16654 | 0.20 | $10.00 | filled | stop | -1.00 |
+| 2026-08-25 19:35 | engulfing | above_mid | 1.16724 | 1.16667 | 0.17 | $9.69 | filled | stop | -1.02 |
+| 2026-09-02 20:55 | engulfing | above_mid | 1.15904 | 1.15870 | 0.20 | $10.00 | filled | stop | -1.00 |
+| 2026-09-07 13:10 | pin_bar | above_mid | 1.16226 | 1.16178 | 0.20 | $10.00 | filled | target | 2.00 |
+| 2026-09-07 14:20 | engulfing | above_mid | 1.16240 | 1.16192 | 0.20 | $10.00 | filled | target | 2.00 |
 
 ### M15 (52 emailed; last 15 shown)
 
