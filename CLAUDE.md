@@ -17,7 +17,7 @@ Project context for Claude Code sessions in this repository.
   5. Strategy engine ✅
   6. Backtest ✅ (first preliminary run on 2026 data done; see `docs/backtest/`)
   7. Entry and lots ✅
-  8. Email
+  8. Email ✅ (synthetic test signal only; **live alerts disabled in code**, `LIVE_ALERTS_ENABLED = false`)
   9. Cap and dedup ✅ (`AlertPolicy`; the live runner will reuse it)
   10. Paper/live
 - **V1.1 daily selector (D9, `docs/v1/selection-v1_1.md`):** exactly 3 alerts per trading day.
@@ -64,7 +64,9 @@ src/data/        sources.ts (CandleSource/QuoteSource interfaces), tick-aggregat
                  tick-stats.ts (data-validation statistics)
 src/strategy/    params.ts (config → points), rules.ts (4 rules), sizing.ts (entry, ref stop, lots),
                  engine.ts (decideAt = live path, decideAll = batch; pure, no look-ahead)
-src/alerts/      policy.ts (daily cap, dedup, cooldown; chronological, causal)
+src/alerts/      policy.ts (daily cap, dedup, cooldown; chronological, causal), daily-selector.ts (V1.1),
+                 email.ts (render + live-alert guard), email-transport.ts (console/file/smtp/resend from env),
+                 synthetic.ts (synthetic BUY signal for email tests)
 src/jev/         Jev research (D11, shadow only): snapshot, battery, client (TypeSafe System One), population,
                  log, logistic baseline, metrics, protocol. Never imported by src/strategy (tested).
 src/backtest/    tick-store.ts (columnar ticks), execution.ts, outcomes.ts, runner.ts, variants.ts, summary.ts
@@ -88,6 +90,7 @@ npm run validate:2015-2023 # tick validation for 2015–2023
 npm run select:frequency   # V1.1 frequency only (no outcomes), 2015 → 2026-09-24
 npm run select:grid        # V1.1 design grid, 2015–2021 only
 npm run select:holdout -- --variant <name>   # V1.1 one-time holdout from 2022-01-01
+npm run email:demo         # send ONE synthetic test email via EMAIL_PROVIDER (default console)
 npm run jev:probe          # check JEV_API_KEY + network (GET /v1/models)
 npm run jev:fit-baseline   # frozen logistic baseline on 2015–2021 → config/jev-baseline-v1.json
 npm run jev:score -- <zips> --start 2026-09-28T00:00:00Z --end <ISO>   # forward scoring only
@@ -117,7 +120,7 @@ npm run jev:evaluate -- <zips> --end <ISO>   # D11 metrics + verdict → docs/je
 - PDF lot-size fixture: $1,000 at 1% risk, entry 1.0860, SL 1.0840 (20 pips) → 0.05 lots.
 - **Commission (P5):** lots = risk$ / (SL pips × pipValuePerLot + commissionPerLotRoundTrip). The value 0 is valid **only** for the approved Standard USD account. Never assume an Exness commission figure.
 - **Evidence hierarchy (D7):** Buy Limit results are the primary evidence. The PDF market entry is a secondary diagnostic only; never choose a timeframe or strategy from it.
-- **Live timeframe (D8):** not locked. Keep testing 15m/30m/1H and always report frequency together with the outcome metrics (fills/week, fill rate, +2R share and expectancy R with 95% intervals, per-year breakdown). The owner decides.
+- **Live timeframe (D8):** not selected (owner, 2026-09-25): deferred until the Jev forward test is evaluated; `alerts.liveTimeframe` is an unused placeholder. Keep testing 15m/30m/1H and always report frequency together with the outcome metrics (fills/week, fill rate, +2R share and expectancy R with 95% intervals, per-year breakdown). The owner decides.
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
 - **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).
@@ -130,5 +133,6 @@ npm run jev:evaluate -- <zips> --end <ISO>   # D11 metrics + verdict → docs/je
   - Never tune rules on this data without a holdout.
 - **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
 - **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
+- **Email:** provider, sender and recipients come only from env vars (`EMAIL_PROVIDER`, `EMAIL_FROM`, `EMAIL_TO`, `SMTP_*`, `RESEND_API_KEY`; see `.env.example`). Never enable live alerts without an explicit owner decision.
 - **Jev (D11):** the API key comes only from the env var `JEV_API_KEY`; never commit, log or echo it. Jev may only score candles from 2026-09-28 onwards (training-data contamination). Any change to the battery, snapshot, model or population restarts the test clock.
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

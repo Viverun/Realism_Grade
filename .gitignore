@@ -7,3 +7,4 @@ data/raw/
 docs/data/Exness_EURUSD_2026.csv
 data/backtest/
 docs/jev/*.fake.jsonl
+data/outbox/

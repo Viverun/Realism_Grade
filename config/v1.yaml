@@ -68,7 +68,8 @@ alerts:                  # all [POLICY]
   maxPerDay: 3
   overCapRule: chronological
   cooldownCandles: 3     # [POLICY, D4]
-  liveTimeframe: H1      # chosen after backtest
+  liveTimeframe: H1      # [POLICY, D8] PLACEHOLDER ONLY — NOT selected. Unused by code; the owner defers
+                         # the choice (15m/30m/1H stay in the comparison) until the Jev forward test is evaluated.
 
 execution:               # all [POLICY] — spec §8
   quoteMode: strict      # strict | candle_close_fallback
