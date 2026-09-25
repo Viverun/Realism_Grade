@@ -20,6 +20,11 @@ Project context for Claude Code sessions in this repository.
   8. Email
   9. Cap and dedup ✅ (`AlertPolicy`; the live runner will reuse it)
   10. Paper/live
+- **V1.1 daily selector (D9, `docs/v1/selection-v1_1.md`):** exactly 3 alerts per trading day.
+  - How it works: slots, tiers A–D by rules passed, a counter-trend flag, and M5 support. `selection.mode: daily_top3` turns it on; the default is `signals` (V1).
+  - **Validated once on the 2022-01 → 2026-09 holdout:** gate PASS (not clearly worse than V1), but −0.18R [−0.23, −0.12] per filled trade.
+  - **Do not present it as profitable.** Tier A (full V1) was −0.40R on the holdout.
+  - The 2022–2026 holdout is **spent** for V1.1: any new rule set needs a fresh holdout.
 
 ## Source-of-truth docs
 
@@ -76,6 +81,10 @@ npm run typecheck   # tsc --noEmit
 npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data report
 npm run backtest:2026      # preliminary backtest → docs/backtest/2026-preliminary.md
 npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.md
+npm run validate:2015-2023 # tick validation for 2015–2023
+npm run select:frequency   # V1.1 frequency only (no outcomes), 2015 → 2026-09-24
+npm run select:grid        # V1.1 design grid, 2015–2021 only
+npm run select:holdout -- --variant <name>   # V1.1 one-time holdout from 2022-01-01
 ```
 
 ## Data
@@ -87,6 +96,8 @@ npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.
   - `_09_24.zip` is for one-day loader validation only;
   - the yearly `Exness_EURUSD_2026.zip` overlaps the monthly files and is not used;
   - `Exness_EURUSD_2024.zip` is yearly; `2025_01..12` are monthly (split locally from a 115 MB yearly zip).
+  - 2015–2023: yearly zips for 2015, 2017, 2019, 2020, 2021 and 2023; monthly for 2016, 2018 and 2022. 2015 starts on 2015-08-10. Spreads were wider in 2015–2018.
+  - Full span: 2015-08-10 → 2026-09-24, 169M ticks. A full run needs `NODE_OPTIONS=--max-old-space-size=8192` (already set in the npm scripts).
 - **The 2025 export has whole UTC days written out of order** (Aug–Dec). `TickStore.normaliseOrder` repairs this only when each day lies in a single block, and refuses otherwise. 4 weekdays are missing from the export (2025-11-27, 12-05, 12-24, 12-26).
 - Backtest JSON dumps go to `data/backtest/` (gitignored).
 - `scripts/crosscheck/independent_signals.py` is an independent Python re-implementation of the rules. Rerun it after any rule change: its signal list must equal the engine's.

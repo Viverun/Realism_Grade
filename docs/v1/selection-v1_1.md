@@ -1,6 +1,6 @@
 # V1.1 daily selector: exactly 3 alerts per trading day
 
-**Status:** BUILT; design grid done and configuration FROZEN (§6); holdout pending. Production default stays `selection.mode: signals` (V1) until the holdout gate in §5 passes and the owner approves paper trading.
+**Status:** VALIDATED — holdout run once (2022-01-01 → 2026-09-24). **Gate PASS (not clearly worse than V1), but expectancy −0.18R [−0.23, −0.12] per filled trade: loss-making. Not for real-money use.** See [`../backtest/v1_1-findings.md`](../backtest/v1_1-findings.md). Production default stays `selection.mode: signals`. Production default stays `selection.mode: signals` (V1) until the holdout gate in §5 passes and the owner approves paper trading.
 **Owner decision D9 (2026-09-25):** "exactly 3 alerts every day". Allowed levers:
 - run 15m + 30m + 1H together;
 - add 5m;

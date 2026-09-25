@@ -435,4 +435,5 @@ The combined `status` in the example above is the most advanced layer reached.
 | D6 | Account | USD standard, as a config assumption (`account.*`), not architecture. |
 | D7 | Evidence hierarchy | Buy Limit = primary evidence; PDF market entry = secondary diagnostic only (2026-09-25). |
 | D8 | Live timeframe | Not locked. Chosen by the owner after comparing Buy Limit frequency and outcomes on 15m/30m/1H (2026-09-25). One alert every 3–4 weeks (1H on 2026 data) is considered too sparse to decide on alone. |
+| D9 | Exactly 3 alerts per trading day | Built as the V1.1 daily selector (`docs/v1/selection-v1_1.md`), 2026-09-25. Holdout 2022–2026: gate PASS (not clearly worse than V1) but −0.18R per filled trade; V1 (`signals`) remains the production default. |
 | PDF review | Corrections (2026-09-25) | P4 market-baseline fill at Ask; P5 commission in sizing (0 for Standard USD only); P6 PDF market entry as a backtest-only baseline; P7 recommended stop shown in the email. See `docs/claude_thinking/pdf-review.md`. The original PDF is unchanged. |
