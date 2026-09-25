@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TickStore } from '../../src/backtest/tick-store.js';
+import { DataOrderError, TickStore } from '../../src/backtest/tick-store.js';
 import { runTimeframe } from '../../src/backtest/runner.js';
 import { summarise } from '../../src/backtest/summary.js';
 import { buildVariants } from '../../src/backtest/variants.js';
@@ -27,14 +27,70 @@ describe('TickStore', () => {
     expect(store.firstAtOrAfter(t('2026-09-26T00:00:00Z'))).toBe(2);
   });
 
-  it('grows past its initial capacity and builds valid candles', () => {
-    const store = new TickStore();
+  it('spans many chunks transparently (small chunks for the test)', () => {
+    const st = new TickStore(4); // 16 ticks per chunk
+    const start = Date.parse('2026-09-21T00:00:00Z');
+    for (let k = 0; k < 1000; k++) st.push({ time: start + k * 1000, bid: 100_000 + k, ask: 100_008 + k });
+    expect(st.length).toBe(1000);
+    expect([st.timeAt(0), st.bid(17), st.ask(999)]).toEqual([start, 100_017, 101_007]);
+    expect(st.firstAtOrAfter(start + 500_500)).toBe(501);
+    // normaliseOrder across chunk boundaries
+    const swapped = new TickStore(4);
+    for (let k = 0; k < 40; k++) swapped.push({ time: start + 86_400_000 + k, bid: 1, ask: 2 }); // day 2 first
+    for (let k = 0; k < 40; k++) swapped.push({ time: start + k, bid: 3, ask: 4 }); // then day 1
+    expect(swapped.normaliseOrder('f')).toMatchObject({ runs: 2, reordered: true });
+    expect([swapped.timeAt(0), swapped.bid(0), swapped.timeAt(79), swapped.bid(79)]).toEqual([start, 3, start + 86_400_039, 1]);
+  });
+
+  it('grows past one chunk and builds valid candles', () => {
+    const store = new TickStore(18);
     const start = Date.parse('2026-09-21T00:00:00Z');
     for (let k = 0; k < (1 << 20) + 10; k++) store.push({ time: start + k * 100, bid: 113_600 + (k % 50), ask: 113_608 + (k % 50) });
     expect(store.length).toBe((1 << 20) + 10);
     const candles = store.buildCandles(start + ((1 << 20) + 10) * 100);
     expect(candles.M15.length).toBeGreaterThan(100);
     expect(candles.H1.every((c) => c.ask !== undefined)).toBe(true);
+  });
+});
+
+describe('TickStore.normaliseOrder (whole-day blocks written out of order)', () => {
+  const day = (d: string, hh: number, mm = 0): number => Date.parse(`2025-08-${d}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`);
+  const fill = (times: number[]): TickStore => {
+    const st = new TickStore();
+    times.forEach((t, k) => st.push({ time: t, bid: 100_000 + k, ask: 100_008 + k }));
+    return st;
+  };
+
+  it('reorders day blocks into chronological order, stably', () => {
+    // Blocks: [20, 22] [21, 25] [24] — like the real 2025-08 export.
+    const st = fill([day('20', 1), day('20', 5), day('22', 3), day('21', 2), day('21', 2), day('25', 9), day('24', 22)]);
+    const report = st.normaliseOrder('f');
+    expect(report).toEqual({ file: 'f', ticks: 7, runs: 3, reordered: true });
+    const times = Array.from({ length: st.length }, (_, k) => st.timeAt(k));
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    // The two ticks at the same timestamp keep their original relative order (bid 100_003 then 100_004).
+    expect([st.bid(2), st.bid(3)]).toEqual([100_003, 100_004]);
+  });
+
+  it('leaves ordered data untouched', () => {
+    const st = fill([day('20', 1), day('21', 1)]);
+    expect(st.normaliseOrder('f')).toEqual({ file: 'f', ticks: 2, runs: 1, reordered: false });
+  });
+
+  it('refuses when a UTC day is split across blocks (ambiguous)', () => {
+    const st = fill([day('20', 1), day('20', 9), day('20', 5)]);
+    expect(() => st.normaliseOrder('f')).toThrow(DataOrderError);
+  });
+
+  it('TickStore.load reorders per file and reports it', async () => {
+    const dir = await tempDir();
+    const iso = (t: number): number => t;
+    await writeFile(join(dir, 'a.csv'), [HEADER, line(iso(day('21', 10)), 113_600, 113_607), line(iso(day('20', 10)), 113_500, 113_507)].join('\n'));
+    const { store, summary } = await TickStore.load([join(dir, 'a.csv')], 5, { endMs: day('30', 0) });
+    expect(store.length).toBe(2);
+    expect(store.timeAt(0)).toBe(day('20', 10));
+    expect(summary.reordered).toEqual([{ file: join(dir, 'a.csv'), ticks: 2, runs: 2, reordered: true }]);
+    expect(summary.dropped.outOfOrder).toBe(0);
   });
 });
 

@@ -13,10 +13,9 @@ import { formatPoints } from '../src/core/price.js';
 import { candleCloseTime, TIMEFRAMES, type Timeframe } from '../src/core/timeframe.js';
 import { clockToMinutes, makeLocalClock } from '../src/core/timezone.js';
 import type { Candle } from '../src/core/types.js';
+import { DataOrderError, TickStore, type FileOrderReport } from '../src/backtest/tick-store.js';
 import { ExnessTickParser, readTickFileLines } from '../src/data/exness-ticks.js';
-import { resampleCandles } from '../src/data/resample.js';
-import { TickAggregator } from '../src/data/tick-aggregator.js';
-import { type SpreadSummary, type TickStats, TickStatsCollector } from '../src/data/tick-stats.js';
+import { scanContinuity, type SpreadSummary, type TickStats, TickStatsCollector } from '../src/data/tick-stats.js';
 import { validateCandles } from '../src/data/validate.js';
 
 interface Args {
@@ -62,6 +61,8 @@ interface FileResult {
   header: string | null;
   stats: TickStats;
   fatal: string | null;
+  order: FileOrderReport | null;
+  orderError: string | null;
 }
 
 const utc = (ms: number | null): string => (ms === null ? '—' : new Date(ms).toISOString().replace('.000Z', 'Z'));
@@ -84,21 +85,21 @@ async function main(): Promise<void> {
     return `${t.date} ${hh}:${mm}`;
   };
 
-  const aggregator = new TickAggregator('M15');
-  const m15: Candle[] = [];
-  let lastCombined = -Infinity;
-  let overlapSkipped = 0;
+  // Candles are built through the backtest loader's own path: per-file order normalisation,
+  // then append with overlap dropping (TickStore.normaliseOrder / appendFrom).
+  const combined = new TickStore();
+  const dropped = { beforeStart: 0, atOrAfterEnd: 0, outOfOrder: 0 };
   const results: FileResult[] = [];
 
   for (const file of args.files) {
     const parser = new ExnessTickParser(digits);
     const collector = new TickStatsCollector({
       pointsPerPip,
+      digits,
       inWindow,
-      gapThresholdMs: args.gapMin * 60_000,
-      jumpThresholdPips: args.jumpPips,
     });
     let fatal: string | null = null;
+    const buffer = new TickStore();
     try {
       for await (const line of readTickFileLines(file)) {
         let row;
@@ -110,49 +111,65 @@ async function main(): Promise<void> {
           continue;
         }
         if (!row) continue;
-        if (!collector.push(row)) continue; // out of order within the file: counted, not aggregated
-        if (row.tick.time < lastCombined) {
-          overlapSkipped += 1; // overlaps a previous file
-          continue;
-        }
-        const closed = aggregator.push(row.tick);
-        if (closed) m15.push(closed);
-        lastCombined = row.tick.time;
+        collector.push(row); // statistics see the file exactly as written
+        buffer.push(row.tick);
       }
     } catch (error) {
       fatal = (error as Error).message;
     }
-    results.push({ file, header: parser.header, stats: collector.result(), fatal });
+    let order: FileOrderReport | null = null;
+    let orderError: string | null = null;
+    if (!fatal) {
+      try {
+        order = buffer.normaliseOrder(basename(file));
+        combined.appendFrom(buffer, { endMs: Infinity }, dropped);
+      } catch (error) {
+        if (!(error instanceof DataOrderError)) throw error;
+        orderError = error.message;
+      }
+    }
+    results.push({ file, header: parser.header, stats: collector.result(), fatal, order, orderError });
     process.stderr.write(`read ${basename(file)}: ${collector.result().rows.toLocaleString('en-US')} ticks\n`);
   }
 
-  const asOf = Number.isFinite(lastCombined) ? lastCombined : 0;
-  const tail = aggregator.flush(asOf);
-  if (tail) m15.push(tail);
-  const candles: Record<Timeframe, Candle[]> = {
-    M15: m15,
-    M30: resampleCandles(m15, 'M30', asOf),
-    H1: resampleCandles(m15, 'H1', asOf),
-  };
+  const overlapSkipped = dropped.outOfOrder;
+  const asOf = combined.length ? combined.timeAt(combined.length - 1) : 0;
+  let candles: Record<Timeframe, Candle[]> = { M5: [], M15: [], M30: [], H1: [] };
+  let candleError: string | null = null;
+  try {
+    if (combined.length) candles = combined.buildCandles(asOf);
+  } catch (error) {
+    candleError = (error as Error).message;
+  }
 
   // ---- verdict ----
   const failures: string[] = [];
   const warnings: string[] = [];
   const totalRows = results.reduce((n, r) => n + r.stats.rows, 0);
   if (totalRows === 0) failures.push('No ticks were read.');
+  if (candleError) failures.push(`Candle build failed: ${candleError}`);
+  const continuity = scanContinuity(combined.length, (k) => combined.timeAt(k), (k) => combined.bid(k), {
+    pointsPerPip,
+    gapThresholdMs: args.gapMin * 60_000,
+    jumpThresholdPips: args.jumpPips,
+    inWindow,
+  });
+  const windowGaps = continuity.weekdayGaps.filter((g) => g.inWindow);
+  if (windowGaps.length) warnings.push(`${windowGaps.length} weekday gaps > ${args.gapMin} min inside the ${config.alerts.windowStart}–${config.alerts.windowEnd} Dubai window (missing data or market halts; see Continuity)`);
+  if (continuity.missingWeekdays.length) warnings.push(`${continuity.missingWeekdays.length} weekdays with no ticks at all: ${continuity.missingWeekdays.join(', ')} (market holidays such as 25 Dec / 1 Jan are expected)`);
   for (const r of results) {
     const name = basename(r.file);
     const s = r.stats;
     if (r.fatal) failures.push(`${name}: fatal read error: ${r.fatal}`);
     if (s.parseErrors.count) failures.push(`${name}: ${s.parseErrors.count} unparseable rows`);
-    if (s.outOfOrder) failures.push(`${name}: ${s.outOfOrder} out-of-order ticks`);
+    if (r.orderError) failures.push(`${name}: ${s.outOfOrder} out-of-order ticks that cannot be safely reordered: ${r.orderError}`);
+    else if (r.order?.reordered) {
+      warnings.push(`${name}: written as ${r.order.runs} out-of-order blocks of whole UTC days (${s.outOfOrder.toLocaleString('en-US')} ticks behind their predecessor); every day lies in one block, so the loader restores chronological order deterministically`);
+    }
     if (s.nonPositive) failures.push(`${name}: ${s.nonPositive} non-positive prices`);
     if (s.crossed.count) warnings.push(`${name}: ${s.crossed.count} crossed quotes (ask < bid)`);
     if (Object.keys(s.symbols).length > 1) warnings.push(`${name}: more than one symbol (${Object.keys(s.symbols).join(', ')})`);
-    const maxDecimals = Math.max(...Object.keys(s.bidDecimals).map(Number), ...Object.keys(s.askDecimals).map(Number));
-    if (maxDecimals > digits) warnings.push(`${name}: prices with ${maxDecimals} decimals; config digits = ${digits} (rounded)`);
-    if (s.gaps.intraweek) warnings.push(`${name}: ${s.gaps.intraweek} weekday gaps > ${args.gapMin} min (holidays or missing data)`);
-    if (s.jumps.count) warnings.push(`${name}: ${s.jumps.count} tick-to-tick bid jumps > ${args.jumpPips} pips`);
+    if (s.precisionLoss.count) warnings.push(`${name}: ${s.precisionLoss.count} prices have real precision beyond ${digits} digits (e.g. ${s.precisionLoss.example}); rounding changes them`);
   }
   if (overlapSkipped) warnings.push(`${overlapSkipped.toLocaleString('en-US')} ticks skipped because files overlap in time (e.g. a yearly file plus monthly files)`);
   for (const tf of TIMEFRAMES) {
@@ -181,7 +198,7 @@ async function main(): Promise<void> {
 
   lines.push('# Tick data validation report', '');
   lines.push(`Generated by \`scripts/validate-ticks.ts\` on ${new Date().toISOString().slice(0, 10)}.`);
-  lines.push('It checks the files against the project\'s own loader (`ExnessTickParser`), candle builder (`TickAggregator`, `resampleCandles`) and integrity checks (`validateCandles`).');
+  lines.push('It checks the files against the project\'s own loader (`ExnessTickParser`), the backtest loader (`TickStore`: order repair, overlap dropping), candle builder (`TickAggregator`, `resampleCandles`) and integrity checks (`validateCandles`).');
   lines.push(`Config: \`${args.config}\` (digits ${digits}, ${pointsPerPip} points/pip, window ${config.alerts.windowStart}–${config.alerts.windowEnd} ${config.alerts.timezone}).`, '');
   lines.push(`## Verdict: **${verdict}**`, '');
   for (const f of failures) lines.push(`- ❌ ${f}`);
@@ -204,13 +221,12 @@ async function main(): Promise<void> {
     lines.push(`- **Timestamp samples:** ${s.timeSamples.map((t) => `\`${t}\``).join(', ') || '—'}`);
     lines.push(`- **Timestamp formats (digits shown as 9):** ${Object.entries(s.timeFormats).map(([k, v]) => `\`${k}\` × ${v.toLocaleString('en-US')}`).join('; ') || '—'}`);
     lines.push(`- **Coverage:** ${utc(s.firstTime)} → ${utc(s.lastTime)} (Dubai ${s.firstTime === null ? '—' : local(s.firstTime)} → ${s.lastTime === null ? '—' : local(s.lastTime)}), ${Object.keys(s.ticksPerDay).length} UTC days with ticks`);
-    lines.push(`- **Ordering:** ${s.outOfOrder} out-of-order, ${s.duplicateTimestamps.toLocaleString('en-US')} ticks sharing the previous tick's timestamp`);
+    lines.push(`- **Ordering (as written):** ${s.outOfOrder.toLocaleString('en-US')} out-of-order, ${s.duplicateTimestamps.toLocaleString('en-US')} ticks sharing the previous tick's timestamp`);
+    if (r.order?.reordered) lines.push(`- **Order repair:** ${r.order.runs} chronological blocks, each UTC day in exactly one block → reordered by timestamp (stable).`);
+    if (r.orderError) lines.push(`- **Order repair refused:** ${r.orderError}`);
     lines.push(`- **Price decimals:** bid ${JSON.stringify(s.bidDecimals)}, ask ${JSON.stringify(s.askDecimals)}`);
+    lines.push(`- **Precision:** ${s.floatNoise.count.toLocaleString('en-US')} prices carry float-formatting noise${s.floatNoise.example ? ` (e.g. \`${s.floatNoise.example}\`)` : ''} and round exactly to ${digits} digits (harmless); ${s.precisionLoss.count} have real extra precision.`);
     lines.push(`- **Quote sanity:** ${s.crossed.count} crossed (ask < bid), ${s.zeroSpread.toLocaleString('en-US')} zero-spread, ${s.nonPositive} non-positive`);
-    lines.push(`- **Gaps > ${args.gapMin} min:** ${s.gaps.weekend} weekend, ${s.gaps.intraweek} weekday`);
-    for (const g of s.gaps.intraweekExamples) lines.push(`  - ${utc(g.from)} → ${utc(g.to)} (${((g.to - g.from) / 60_000).toFixed(0)} min)`);
-    lines.push(`- **Bid jumps > ${args.jumpPips} pips between consecutive ticks:** ${s.jumps.count}`);
-    for (const j of s.jumps.examples) lines.push(`  - ${utc(j.time)}: ${formatPoints(j.fromBid, digits)} → ${formatPoints(j.toBid, digits)} (${j.pips.toFixed(1)} pips)`);
     if (s.parseErrors.count) {
       lines.push(`- **Parse errors:** ${s.parseErrors.count}`);
       for (const e of s.parseErrors.examples) lines.push(`  - ${e}`);
@@ -226,6 +242,19 @@ async function main(): Promise<void> {
     lines.push('');
   }
 
+  lines.push('## Continuity (after order repair, all files combined)', '');
+  lines.push(`- **Weekend closes:** ${continuity.weekendGaps}`);
+  lines.push(`- **Weekdays with no ticks:** ${continuity.missingWeekdays.length ? continuity.missingWeekdays.join(', ') : 'none'}`);
+  lines.push(`- **Weekday gaps > ${args.gapMin} min:** ${continuity.weekdayGaps.length} (${windowGaps.length} touching the trading window). Gaps at 21:00/22:00 UTC are the daily rollover break.`);
+  for (const g of continuity.weekdayGaps.slice(0, 60)) {
+    lines.push(`  - ${utc(g.from)} → ${utc(g.to)} (${((g.to - g.from) / 60_000).toFixed(0)} min)${g.inWindow ? ' **in window**' : ''}`);
+  }
+  lines.push(`- **Bid jumps > ${args.jumpPips} pips between consecutive ticks:** ${continuity.jumpCount} (weekend re-opens and news releases are expected)`);
+  for (const j of continuity.jumps.slice(0, 30)) {
+    lines.push(`  - ${utc(j.time)}: ${formatPoints(j.fromBid, digits)} → ${formatPoints(j.toBid, digits)} (${j.pips.toFixed(1)} pips)`);
+  }
+  lines.push('');
+
   lines.push('## Symbol / account variant', '');
   lines.push('The file alone cannot prove which Exness account type it belongs to. Evidence:');
   for (const r of results) {
@@ -235,7 +264,7 @@ async function main(): Promise<void> {
   lines.push('', 'Spread-only account types generally show wider typical EUR/USD spreads than raw-spread/commission types, which sit near zero. **The owner must confirm** that the export matches the trading account (approved: Standard USD).', '');
 
   lines.push('## Candle build (combined, files in name order)', '');
-  lines.push(`Built from ${totalRows.toLocaleString('en-US')} ticks. The last, incomplete candle is excluded (closed candles only).`, '');
+  lines.push(`Built with the backtest loader (per-file order repair, overlapping ticks dropped: ${overlapSkipped.toLocaleString('en-US')}) from ${combined.length.toLocaleString('en-US')} of ${totalRows.toLocaleString('en-US')} ticks. The last, incomplete candle is excluded (closed candles only).`, '');
   lines.push('| Timeframe | Candles | Integrity issues | With Ask OHLC | First open (UTC) | Last open (UTC) |', '|---|---|---|---|---|---|');
   for (const tf of TIMEFRAMES) {
     const list = candles[tf];

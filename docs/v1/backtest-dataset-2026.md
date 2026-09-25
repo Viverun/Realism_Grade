@@ -1,5 +1,7 @@
 # Initial backtest dataset: EUR/USD 2026 (partial year)
 
+> **Update, 2026-09-25:** 2024 and 2025 data are now available. The main dataset is **2024-01 → 2026-09-24** (`npm run backtest:all`); see [`../backtest/2024-2026-findings.md`](../backtest/2024-2026-findings.md). This page documents the initial 2026-only run.
+
 **Decided by the owner, 2026-09-25.** 2025 data is not required for this phase; development does not wait for it.
 
 ## Purpose of this phase
@@ -20,7 +22,7 @@ The files live in `docs/data/`, zipped (GitHub's per-file limit is 100 MB).
 | Role | Files | Used for |
 |---|---|---|
 | **Backtest dataset** | `Exness_EURUSD_2026_01.zip` … `Exness_EURUSD_2026_09.zip` (monthly) | Candles, indicators, signals, execution and outcomes |
-| **Loader validation only** | `Exness_EURUSD_2026_09_25.*` (one day) | `npm run validate:ticks` report only. **Never** part of the backtest. |
+| **Loader validation only** | `Exness_EURUSD_2026_09_24.zip` (one day; byte-identical to 24 Sep inside the September monthly zip). The intended 2026-09-25 file was not pushed. | `npm run validate:ticks` report only. **Never** part of the backtest. |
 | Not used | `Exness_EURUSD_2026.zip` (yearly) | Overlaps the monthly files. If passed, overlapping ticks are dropped and reported. |
 
 ## Boundaries
@@ -43,8 +45,8 @@ The files live in `docs/data/`, zipped (GitHub's per-file limit is 100 MB).
 
 ```bash
 # 1. Loader validation of the one-day file (kept separate)
-npm run validate:ticks -- docs/data/Exness_EURUSD_2026_09_25.zip \
-  --out docs/claude_thinking/tick-data-validation-2026-09-25.md
+npm run validate:ticks -- docs/data/Exness_EURUSD_2026_09_24.zip \
+  --out docs/claude_thinking/tick-data-validation-2026-09-24.md
 
 # 2. Validation of the backtest dataset
 npm run validate:ticks -- docs/data/Exness_EURUSD_2026_0?.zip \
@@ -54,7 +56,7 @@ npm run validate:ticks -- docs/data/Exness_EURUSD_2026_0?.zip \
 npm run backtest:2026
 ```
 
-Use `.csv` in step 1 if the one-day file is a CSV. `npm run backtest:2026` writes `docs/backtest/2026-preliminary.md` and a full JSON dump to `data/backtest/2026-preliminary.json` (gitignored).
+**First run (2026-09-25): data PASS, 89 signals, independently cross-checked.** See [`../backtest/2026-preliminary-findings.md`](../backtest/2026-preliminary-findings.md). `npm run backtest:2026` writes `docs/backtest/2026-preliminary.md` and a full JSON dump to `data/backtest/2026-preliminary.json` (gitignored).
 
 ## Known limitations of this dataset
 - **Partial year:** about 8.8 months of ticks, minus warm-up. Seasonality and regime changes outside 2026 are not represented.

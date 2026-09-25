@@ -49,6 +49,7 @@ strategy:
     maxUpperRatio: 0.2   # [ENG]
     requireBullishBody: false  # [PDF-INTERP] hammer may be either colour
   timeframes:            # all [ENG]
+    M5:  { touchTolPips: 1.5, minSwingPips: 6, minRangePips: 2, entryOffsetPips: 0.5, slBufferPips: 1.5, outcomeHorizons: [12, 48, 288] }  # V1.1 (D9); scaled from M15
     M15: { touchTolPips: 2, minSwingPips: 8,  minRangePips: 3, entryOffsetPips: 1.0, slBufferPips: 2, outcomeHorizons: [4, 16, 96] }
     M30: { touchTolPips: 3, minSwingPips: 10, minRangePips: 4, entryOffsetPips: 1.5, slBufferPips: 2, outcomeHorizons: [4, 8, 48] }
     H1:  { touchTolPips: 5, minSwingPips: 15, minRangePips: 5, entryOffsetPips: 2.0, slBufferPips: 3, outcomeHorizons: [4, 8, 24] }
@@ -76,6 +77,16 @@ execution:               # all [POLICY] — spec §8
   minLimitDistancePips: 0
   candleSettleSec: 5
   assumedSpreadPips: 1.0 # only used when no Ask data exists
+
+selection:               # V1.1 daily selector (owner decision D9: exactly 3 alerts per trading day)
+  mode: signals          # [POLICY] signals = V1 behaviour | daily_top3 = V1.1 (only after the holdout gate)
+  timeframes: [M5, M15, M30, H1]   # [ENG] candidate timeframes for daily_top3
+  immediateMinScore: 4   # [ENG] a candidate with this many of the 4 rules is sent at once (4 = full V1 signal)
+  weekdays: [1, 2, 3, 4, 5]        # [POLICY] trading days (local weekday, 0 = Sunday)
+  slots:                 # [POLICY] one alert per slot, local time (alerts.timezone)
+    - { start: "08:00", end: "13:00" }
+    - { start: "13:00", end: "18:00" }
+    - { start: "18:00", end: "23:00" }
 
 backtest:
   placementDelaySec: 60  # [ENG] simulated trader reaction time

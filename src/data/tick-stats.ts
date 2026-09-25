@@ -3,12 +3,10 @@ import type { ExnessTickRow } from './exness-ticks.js';
 
 export interface TickStatsOptions {
   pointsPerPip: number;
+  /** Instrument digits; used to tell float-formatting noise from real extra precision. */
+  digits: number;
   /** Local-time classifier for the trading window (spreads are also reported inside it). */
   inWindow: (utcMs: number) => boolean;
-  /** Gaps between consecutive ticks longer than this are reported. */
-  gapThresholdMs: number;
-  /** Bid moves between consecutive ticks larger than this (in pips) are reported. */
-  jumpThresholdPips: number;
   maxExamples?: number;
 }
 
@@ -16,6 +14,8 @@ export interface Gap {
   from: number;
   to: number;
   weekend: boolean;
+  /** True if any part of the gap falls inside the trading window. */
+  inWindow: boolean;
 }
 
 export interface Jump {
@@ -47,13 +47,15 @@ export interface TickStats {
   duplicateTimestamps: number;
   bidDecimals: Record<number, number>;
   askDecimals: Record<number, number>;
+  /** Prices with more than `digits` decimals that still round exactly (e.g. 1.1381999999999999). */
+  floatNoise: { count: number; example: string | null };
+  /** Prices with genuine sub-point precision that rounding changes. */
+  precisionLoss: { count: number; example: string | null };
   crossed: { count: number; examples: string[] };
   zeroSpread: number;
   nonPositive: number;
   spread: SpreadSummary | null;
   spreadInWindow: SpreadSummary | null;
-  gaps: { weekend: number; intraweek: number; intraweekExamples: Gap[] };
-  jumps: { count: number; examples: Jump[] };
   ticksPerDay: Record<string, number>;
 }
 
@@ -121,13 +123,13 @@ export class TickStatsCollector {
     duplicateTimestamps: 0,
     bidDecimals: {},
     askDecimals: {},
+    floatNoise: { count: 0, example: null },
+    precisionLoss: { count: 0, example: null },
     crossed: { count: 0, examples: [] },
     zeroSpread: 0,
     nonPositive: 0,
     spread: null,
     spreadInWindow: null,
-    gaps: { weekend: 0, intraweek: 0, intraweekExamples: [] },
-    jumps: { count: 0, examples: [] },
     ticksPerDay: {},
   };
   private readonly spreads = new Map<number, number>();
@@ -158,6 +160,13 @@ export class TickStatsCollector {
     const ad = decimals(row.rawAsk);
     s.bidDecimals[bd] = (s.bidDecimals[bd] ?? 0) + 1;
     s.askDecimals[ad] = (s.askDecimals[ad] ?? 0) + 1;
+    for (const [raw, dec] of [[row.rawBid, bd], [row.rawAsk, ad]] as const) {
+      if (dec <= this.options.digits) continue;
+      const scaled = Number(raw) * 10 ** this.options.digits;
+      const bucket = Math.abs(scaled - Math.round(scaled)) < 1e-6 ? s.floatNoise : s.precisionLoss;
+      bucket.count += 1;
+      bucket.example ??= raw;
+    }
     if (tick.bid <= 0 || tick.ask <= 0) s.nonPositive += 1;
 
     const spread = tick.ask - tick.bid;
@@ -184,24 +193,6 @@ export class TickStatsCollector {
         return false;
       }
       if (tick.time === prev.time) s.duplicateTimestamps += 1;
-      const gap = tick.time - prev.time;
-      if (gap > this.options.gapThresholdMs) {
-        const weekend = spansSaturday(prev.time, tick.time);
-        if (weekend) s.gaps.weekend += 1;
-        else {
-          s.gaps.intraweek += 1;
-          if (s.gaps.intraweekExamples.length < this.maxExamples) {
-            s.gaps.intraweekExamples.push({ from: prev.time, to: tick.time, weekend });
-          }
-        }
-      }
-      const movePips = Math.abs(tick.bid - prev.bid) / this.options.pointsPerPip;
-      if (movePips > this.options.jumpThresholdPips) {
-        s.jumps.count += 1;
-        if (s.jumps.examples.length < this.maxExamples) {
-          s.jumps.examples.push({ time: tick.time, fromBid: prev.bid, toBid: tick.bid, pips: movePips });
-        }
-      }
     }
     if (s.firstTime === null) s.firstTime = tick.time;
     s.lastTime = tick.time;
@@ -216,4 +207,61 @@ export class TickStatsCollector {
       spreadInWindow: summarise(this.spreadsInWindow, this.options.pointsPerPip),
     };
   }
+}
+
+export interface ContinuityOptions {
+  pointsPerPip: number;
+  gapThresholdMs: number;
+  jumpThresholdPips: number;
+  inWindow: (utcMs: number) => boolean;
+  maxExamples?: number;
+}
+
+export interface Continuity {
+  weekendGaps: number;
+  weekdayGaps: Gap[];
+  jumps: Jump[];
+  jumpCount: number;
+  /** Mon–Fri UTC dates between the first and last tick with no ticks at all. */
+  missingWeekdays: string[];
+}
+
+/** Gaps, jumps and missing weekdays, computed on chronologically ordered ticks (after order repair). */
+export function scanContinuity(
+  length: number,
+  timeAt: (k: number) => number,
+  bidAt: (k: number) => number,
+  options: ContinuityOptions,
+): Continuity {
+  const result: Continuity = { weekendGaps: 0, weekdayGaps: [], jumps: [], jumpCount: 0, missingWeekdays: [] };
+  const maxExamples = options.maxExamples ?? 50;
+  const days = new Set<number>();
+  for (let k = 0; k < length; k++) {
+    const t = timeAt(k);
+    days.add(Math.floor(t / DAY_MS));
+    if (k === 0) continue;
+    const prev = timeAt(k - 1);
+    if (t - prev > options.gapThresholdMs) {
+      if (spansSaturday(prev, t)) result.weekendGaps += 1;
+      else {
+        let inWindow = false;
+        for (let m = prev; m < t && !inWindow; m += 60_000) inWindow = options.inWindow(m);
+        result.weekdayGaps.push({ from: prev, to: t, weekend: false, inWindow });
+      }
+    }
+    const pips = Math.abs(bidAt(k) - bidAt(k - 1)) / options.pointsPerPip;
+    if (pips > options.jumpThresholdPips) {
+      result.jumpCount += 1;
+      if (result.jumps.length < maxExamples) result.jumps.push({ time: t, fromBid: bidAt(k - 1), toBid: bidAt(k), pips });
+    }
+  }
+  if (length > 0) {
+    const first = Math.floor(timeAt(0) / DAY_MS);
+    const last = Math.floor(timeAt(length - 1) / DAY_MS);
+    for (let d = first; d <= last; d++) {
+      const weekday = new Date(d * DAY_MS).getUTCDay();
+      if (weekday >= 1 && weekday <= 5 && !days.has(d)) result.missingWeekdays.push(new Date(d * DAY_MS).toISOString().slice(0, 10));
+    }
+  }
+  return result;
 }

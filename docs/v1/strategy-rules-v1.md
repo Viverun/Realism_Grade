@@ -343,6 +343,19 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
    - `+2R before −1R`, where R = SL_PIPS from §9. This is PDF-consistent (1:2 R:R) and reported as a research metric, **not** a win rate. If both levels are hit inside the same candle with candle-only data, it is counted as `ambiguous`.
 6. **Report per timeframe and variant:** signal count, signals per day, status breakdown, fill rate, and the outcome distributions.
 
+**Evidence hierarchy (owner decision, 2026-09-25) [POLICY]:**
+- **Buy Limit results are the primary evidence** for timeframe and strategy decisions, because production V1 is Buy Limit only.
+- The PDF market-entry baseline is a **secondary diagnostic only**, e.g. for spotting adverse selection. It is never used on its own to choose a timeframe or strategy.
+
+**Timeframe selection [POLICY]:** the live timeframe is **not locked**. 15m, 30m and 1H are all tested, and each report shows **signal frequency together with the outcome metrics** for the Buy Limit:
+- alerts and fills per week;
+- fill rate;
+- +2R share with a 95% Wilson interval;
+- expectancy in R per filled trade and per emailed alert, with 95% intervals;
+- a per-year breakdown.
+
+The owner selects the live timeframe after comparing these.
+
 **Variants:**
 - `rsiOversold` 30 vs 35
 - `rsiMode` both / recovery_only / above_mid_only
@@ -420,4 +433,6 @@ The combined `status` in the example above is the most advanced layer reached.
 | D4 | Cooldown | 3 candles per timeframe, configurable; it is a safeguard, not a claim of correctness. |
 | D5 | Support | 50 EMA only in V1. |
 | D6 | Account | USD standard, as a config assumption (`account.*`), not architecture. |
+| D7 | Evidence hierarchy | Buy Limit = primary evidence; PDF market entry = secondary diagnostic only (2026-09-25). |
+| D8 | Live timeframe | Not locked. Chosen by the owner after comparing Buy Limit frequency and outcomes on 15m/30m/1H (2026-09-25). One alert every 3–4 weeks (1H on 2026 data) is considered too sparse to decide on alone. |
 | PDF review | Corrections (2026-09-25) | P4 market-baseline fill at Ask; P5 commission in sizing (0 for Standard USD only); P6 PDF market entry as a backtest-only baseline; P7 recommended stop shown in the email. See `docs/claude_thinking/pdf-review.md`. The original PDF is unchanged. |

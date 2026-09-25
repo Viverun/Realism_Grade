@@ -15,7 +15,7 @@ Project context for Claude Code sessions in this repository.
   3. EMA/RSI ✅
   4. Pullback and candle detection ✅
   5. Strategy engine ✅
-  6. Backtest ✅ (engine built; first run on 2026 data pending)
+  6. Backtest ✅ (first preliminary run on 2026 data done; see `docs/backtest/`)
   7. Entry and lots ✅
   8. Email
   9. Cap and dedup ✅ (`AlertPolicy`; the live runner will reuse it)
@@ -75,13 +75,21 @@ npm test            # vitest
 npm run typecheck   # tsc --noEmit
 npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data report
 npm run backtest:2026      # preliminary backtest → docs/backtest/2026-preliminary.md
+npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.md
 ```
 
 ## Data
 
 - The live data provider is **not chosen yet**; it will implement `CandleSource` and `QuoteSource`.
 - Backtest data preferably comes from Exness tick history (Bid/Ask; indicative), fed through `ExnessTickCandleSource`.
-- Raw data goes in `data/raw/`, which is gitignored.
+- **Tick data lives in `docs/data/`** as zips (GitHub's limit is 100 MB per file):
+  - monthly `Exness_EURUSD_2026_01..09.zip` is the backtest dataset;
+  - `_09_24.zip` is for one-day loader validation only;
+  - the yearly `Exness_EURUSD_2026.zip` overlaps the monthly files and is not used;
+  - `Exness_EURUSD_2024.zip` is yearly; `2025_01..12` are monthly (split locally from a 115 MB yearly zip).
+- **The 2025 export has whole UTC days written out of order** (Aug–Dec). `TickStore.normaliseOrder` repairs this only when each day lies in a single block, and refuses otherwise. 4 weekdays are missing from the export (2025-11-27, 12-05, 12-24, 12-26).
+- Backtest JSON dumps go to `data/backtest/` (gitignored).
+- `scripts/crosscheck/independent_signals.py` is an independent Python re-implementation of the rules. Rerun it after any rule change: its signal list must equal the engine's.
 
 ## Gotchas
 
@@ -90,9 +98,18 @@ npm run backtest:2026      # preliminary backtest → docs/backtest/2026-prelimi
 - The EMA needs `warmupCandles = 1000` to be independent of its seed.
 - PDF lot-size fixture: $1,000 at 1% risk, entry 1.0860, SL 1.0840 (20 pips) → 0.05 lots.
 - **Commission (P5):** lots = risk$ / (SL pips × pipValuePerLot + commissionPerLotRoundTrip). The value 0 is valid **only** for the approved Standard USD account. Never assume an Exness commission figure.
+- **Evidence hierarchy (D7):** Buy Limit results are the primary evidence. The PDF market entry is a secondary diagnostic only; never choose a timeframe or strategy from it.
+- **Live timeframe (D8):** not locked. Keep testing 15m/30m/1H and always report frequency together with the outcome metrics (fills/week, fill rate, +2R share and expectancy R with 95% intervals, per-year breakdown). The owner decides.
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
 - **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).
+- **Main findings, 2024-01 → 2026-09-24** (`docs/backtest/2024-2026-findings.md`): no timeframe shows positive Buy Limit expectancy.
+  - M15: −0.25R [−0.47, −0.04], negative every year.
+  - M30: −0.08R, about 1 alert/week.
+  - H1: −0.12R, about 0.56 alerts/week.
+  - RSI is effectively "> 50 and rising".
+  - The live timeframe is still the owner's decision (D8).
+  - Never tune rules on this data without a holdout.
 - **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
 - **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

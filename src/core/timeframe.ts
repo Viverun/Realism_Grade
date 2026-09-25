@@ -1,10 +1,11 @@
-export const TIMEFRAMES = ['M15', 'M30', 'H1'] as const;
+export const TIMEFRAMES = ['M5', 'M15', 'M30', 'H1'] as const;
 
 export type Timeframe = (typeof TIMEFRAMES)[number];
 
 const MINUTE_MS = 60_000;
 
 export const TIMEFRAME_MS: Readonly<Record<Timeframe, number>> = {
+  M5: 5 * MINUTE_MS,
   M15: 15 * MINUTE_MS,
   M30: 30 * MINUTE_MS,
   H1: 60 * MINUTE_MS,

@@ -40,6 +40,21 @@ describe('scripts/validate-ticks.ts', () => {
     expect(report).toContain('`EURUSDm`');
   }, 30_000);
 
+  it('repairs whole-day blocks written out of order (warning, not failure)', async () => {
+    const rows = [HEADER];
+    for (const day of ['22', '21']) {
+      for (let m = 0; m < 120; m++) {
+        const t = new Date(Date.parse(`2026-09-${day}T06:00:00Z`) + m * 60_000).toISOString().replace('T', ' ');
+        rows.push(`"exness","EURUSDm","${t}",1.13600,1.13608`);
+      }
+    }
+    const { code, report } = await validate(rows.join('\n'));
+    expect(code).toBe(0);
+    expect(report).toContain('## Verdict: **PASS with warnings**');
+    expect(report).toContain('written as 2 out-of-order blocks of whole UTC days');
+    expect(report).toMatch(/\| H1 \| 3 \| 0 \|/); // 21st 06:00, 07:00 and 22nd 06:00 closed; 22nd 07:00 is the last (open) candle
+  }, 30_000);
+
   it('fails on out-of-order ticks and unparseable rows', async () => {
     const { code, report } = await validate(
       [
