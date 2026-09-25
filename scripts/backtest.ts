@@ -77,8 +77,10 @@ async function main(): Promise<void> {
   for (const variant of variants) {
     for (const tf of TIMEFRAMES) {
       const run = runTimeframe(store, candles[tf], tf, variant);
-      runs.push(run);
       summaries.push(summarise(run, config.alerts.timezone));
+      // Per-candle decisions are only needed for the summary; releasing them keeps a
+      // multi-year run (M5 over a decade × every variant) within the heap.
+      runs.push({ ...run, decisions: [] });
     }
   }
   process.stderr.write(`ran ${runs.length} variant×timeframe runs in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);

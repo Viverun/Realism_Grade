@@ -78,12 +78,12 @@ describe('engine', () => {
     }
   });
 
-  it('NL12: strategy and indicator code never import backtest or alert code', () => {
+  it('NL12: strategy and indicator code never import backtest, alert or Jev code', () => {
     const root = new URL('../../src/', import.meta.url).pathname;
     for (const dir of ['strategy', 'indicators', 'core']) {
       for (const file of readdirSync(join(root, dir))) {
         const text = readFileSync(join(root, dir, file), 'utf8');
-        expect(text, `${dir}/${file}`).not.toMatch(/from '\.\.\/(backtest|alerts)\//);
+        expect(text, `${dir}/${file}`).not.toMatch(/from '\.\.\/(backtest|alerts|jev)\//);
       }
     }
   });

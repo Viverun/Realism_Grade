@@ -35,7 +35,7 @@ Project context for Claude Code sessions in this repository.
 | `docs/foundation/EUR_USD Entry Strategy Guide.pdf` | Ahmad's original strategy. It is truncated at "Applying the Lot Size Formula:". |
 | `config/v1.yaml` | Every parameter, each tagged with its provenance |
 | `docs/v1/backtest-dataset-2026.md` | The initial backtest dataset: 2026 only, through 2026-09-24, partial year, **preliminary results only**. 2026-09-25 is the loader-validation file only. |
-| `docs/v1/jev-research-spec.md` | **Proposed D11**: Jev's exact role ("Jev judges, code executes"; shadow only) and the pre-registered forward validation test. Historical backtests of Jev are invalid, because 2015–2026 may be in its training data. |
+| `docs/v1/jev-research-spec.md` | **D11, approved 2026-09-25**: Jev's exact role ("Jev judges, code executes"; shadow only) and the pre-registered forward validation test. Historical backtests of Jev are invalid, because 2015–2026 may be in its training data. |
 | `docs/claude_thinking/` | Claude's reviews and reasoning; advisory. `pdf-review.md` lists the PDF errors (P1–P8), `corrected-strategy.md` is the corrected rewrite. **The original PDF and context-V1.md are never edited.** |
 
 ## Hard rules for code
@@ -65,6 +65,8 @@ src/data/        sources.ts (CandleSource/QuoteSource interfaces), tick-aggregat
 src/strategy/    params.ts (config → points), rules.ts (4 rules), sizing.ts (entry, ref stop, lots),
                  engine.ts (decideAt = live path, decideAll = batch; pure, no look-ahead)
 src/alerts/      policy.ts (daily cap, dedup, cooldown; chronological, causal)
+src/jev/         Jev research (D11, shadow only): snapshot, battery, client (TypeSafe System One), population,
+                 log, logistic baseline, metrics, protocol. Never imported by src/strategy (tested).
 src/backtest/    tick-store.ts (columnar ticks), execution.ts, outcomes.ts, runner.ts, variants.ts, summary.ts
 scripts/         validate-ticks.ts (tick-file validation report), backtest.ts (backtest report)
 src/indicators/  ema.ts (SMA-seeded), rsi.ts (Wilder, MT5 edge cases), index.ts
@@ -86,6 +88,10 @@ npm run validate:2015-2023 # tick validation for 2015–2023
 npm run select:frequency   # V1.1 frequency only (no outcomes), 2015 → 2026-09-24
 npm run select:grid        # V1.1 design grid, 2015–2021 only
 npm run select:holdout -- --variant <name>   # V1.1 one-time holdout from 2022-01-01
+npm run jev:probe          # check JEV_API_KEY + network (GET /v1/models)
+npm run jev:fit-baseline   # frozen logistic baseline on 2015–2021 → config/jev-baseline-v1.json
+npm run jev:score -- <zips> --start 2026-09-28T00:00:00Z --end <ISO>   # forward scoring only
+npm run jev:evaluate -- <zips> --end <ISO>   # D11 metrics + verdict → docs/jev/validation.md
 ```
 
 ## Data
@@ -124,4 +130,5 @@ npm run select:holdout -- --variant <name>   # V1.1 one-time holdout from 2022-0
   - Never tune rules on this data without a holdout.
 - **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
 - **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
+- **Jev (D11):** the API key comes only from the env var `JEV_API_KEY`; never commit, log or echo it. Jev may only score candles from 2026-09-28 onwards (training-data contamination). Any change to the battery, snapshot, model or population restarts the test clock.
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

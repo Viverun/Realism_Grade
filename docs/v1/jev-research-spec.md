@@ -1,6 +1,6 @@
-# Jev research: role and validation test (proposed D11)
+# Jev research: role and validation test (D11)
 
-**Status: PROPOSED, awaiting owner approval.** Nothing here changes V1: Jev stays **outside the V1 decision path** (context-V1 §28, CLAUDE.md) until this test passes **and** the owner approves the next phase.
+**Status: APPROVED by the owner on 2026-09-25 (D11).** Pricing is not a constraint (owner). Nothing here changes V1: Jev stays **outside the V1 decision path** (context-V1 §28, CLAUDE.md) until this test passes **and** the owner approves the next phase.
 
 **References** (patterns only; no code, thresholds or strategies are copied), cited from the owner's review of the gist `drillan/6916b16e…`:
 - `buberlo/jev-trader`: feature engine → atomic judgments → deterministic policy → calibration log;
@@ -79,7 +79,7 @@ Every question is independent and asked separately, so one answer can't anchor a
 - Configurable sampling is available if cost requires it.
 
 **Data:** only candles **after Jev's knowledge cutoff**.
-- **The primary window starts on the day this spec is approved** (at the latest; ideally no earlier than 2026-10-01).
+- **The primary window starts on 2026-09-28 00:00 UTC** (`src/jev/protocol.ts`): the first full trading week after approval, and after `jev-latest`'s release date (2026-09-15, as given in TypeSafe's published OpenAPI schema; to be confirmed by `npm run jev:probe` once the key and network are set up), so no candle in it can be in Jev's training data. `npm run jev:probe` re-checks the release date; if a newer model is released, the window must move after it (clock restart).
 - **Earlier candles are excluded:** any candle from before that date may be in Jev's training data and **can never count as evidence**. That rules out every backtest on 2015–2026.
 - **Scoring can be done later in batches** from monthly Exness tick downloads. Candles after the cutoff are unknown to Jev whenever they're scored. No live feed is needed for the research phase.
 
@@ -131,16 +131,27 @@ Any change to the model version, `promptHash`, `snapshotVersion`, question set o
 
 These solve different problems.
 
-## 7. Needed from the owner before implementation
-1. **Approve D11** (this spec), including the start date of the primary window.
+## 7. Owner inputs (status)
+1. ~~Approve D11~~ **Approved 2026-09-25.**
 2. **Jev access:** the API key as the environment secret `JEV_API_KEY` (never in chat or git), pricing and rate limits, and the documented **training/knowledge cutoff**. The start date must be after it. The API shape is now known (§3); the cutoff and pricing are still missing.
-3. **A cost budget per month.** At about 40 samples/day, that is about 800 requests/month (one request carries all 5 questions).
+3. ~~A cost budget per month.~~ Owner: pricing is not a constraint. For reference, about 40–50 samples/day is about 1,000 requests/month (one request carries all 5 questions).
 4. **A monthly Exness tick export** from the start date onwards, or the live data provider decision, if real-time scoring is wanted.
 
-## 8. Implementation outline (once approved)
-- `src/jev/snapshot.ts`: pure function from (Series, i, Decision) to Snapshot, with a unit-tested `snapshotVersion`.
-- `src/jev/client.ts`: a `JevJudge` interface. The real client plus a deterministic fake for tests. It targets `POST /v1/systemone` (§3) and reads the key only from `JEV_API_KEY`.
-- `src/jev/log.ts`: an append-only JSONL log of snapshot, answers, versions and V1 decision.
-- `scripts/jev-score.ts`: batch-scores post-cutoff candles.
-- `scripts/jev-evaluate.ts`: joins the log with tick-based labels, computes the §4 metrics and the PASS/FAIL verdict, and writes a report.
-- The logistic baseline is fitted on 2015–2021 by a script, and its coefficients are committed before launch.
+## 8. Implementation (done)
+| File | Role |
+|---|---|
+| `src/jev/snapshot.ts` | Pure function from (Series, i, Decision, plan) to the §2 snapshot; `SNAPSHOT_VERSION`; feature vector for the baseline. Tested for prefix invariance (no look-ahead) and for containing no dates, times or absolute prices. |
+| `src/jev/battery.ts` | The frozen Q1–Q5 wording (Noul/Choice), the state preamble, `PROMPT_HASH`. |
+| `src/jev/client.ts` | `JevJudge` interface; `TypeSafeJudge` (`POST /v1/systemone`, Bearer key from `JEV_API_KEY`, retries 408/429/5xx, validates every answer); `FakeJudge` (deterministic, carries no information) for tests and dry runs. |
+| `src/jev/population.ts` | The §4 population (M30/H1 all tiers, M5/M15 tier A; in window; trading days) and tick-based labels with the V1 Buy Limit model. |
+| `src/jev/log.ts` | Append-only JSONL log (`docs/jev/jev-log.jsonl`, committed: git history timestamps every judgment before its outcome is known). |
+| `src/jev/logistic.ts` | The logistic baseline (standardised, Newton–IRLS, L2). Frozen coefficients: `config/jev-baseline-v1.json`, fitted on 2015–2021 by `npm run jev:fit-baseline`. |
+| `src/jev/metrics.ts` | AUC, Brier skill, ECE/reliability, tercile spread, day-block bootstrap, and the PASS/FAIL/INSUFFICIENT_DATA verdict. |
+| `src/jev/protocol.ts` | All §4 constants, including the primary window start. |
+| `scripts/jev.ts` | `probe`, `fit-baseline`, `score`, `evaluate`. `score` refuses any candle before the primary window unless `--fake`. |
+
+**Monthly routine (batch mode, no live feed needed):**
+1. Add the new month's Exness tick zip to `docs/data/`.
+2. `npm run jev:score -- docs/data/Exness_EURUSD_2026_0[7-9].zip docs/data/Exness_EURUSD_2026_1*.zip --start 2026-09-28T00:00:00Z --end <first day of next month>`. Include about 3 months before the start for warm-up. Already-logged samples are skipped.
+3. Commit `docs/jev/jev-log.jsonl`.
+4. `npm run jev:evaluate -- <same files> --end <same>` writes `docs/jev/validation.md`. Until the minimum duration and sample size are reached, the verdict is `INSUFFICIENT_DATA` and nothing may change (no peeking).
