@@ -51,8 +51,11 @@ Project context for Claude Code sessions in this repository.
 ```
 src/core/        price.ts (points/pips), timeframe.ts (M15/M30/H1, UTC buckets), types.ts (Candle, Tick, Quote)
 src/config/      schema.ts (zod), load.ts (YAML load, configHash)
+src/core/        timezone.ts (fast UTC→local clock, HH:MM parsing)
 src/data/        sources.ts (CandleSource/QuoteSource interfaces), tick-aggregator.ts, resample.ts,
-                 validate.ts, exness-ticks.ts (Exness tick CSV), exness-tick-source.ts, ohlc-csv.ts
+                 validate.ts, exness-ticks.ts (Exness tick CSV/.zip), exness-tick-source.ts, ohlc-csv.ts,
+                 tick-stats.ts (data-validation statistics)
+scripts/         validate-ticks.ts (tick-file validation report)
 src/indicators/  ema.ts (SMA-seeded), rsi.ts (Wilder, MT5 edge cases), index.ts
 test/            mirrors src/; helpers/random.ts is a seeded PRNG
 ```
@@ -65,6 +68,7 @@ Node ≥ 22, TypeScript (ESM, NodeNext). Relative imports use `.js` extensions.
 npm install
 npm test            # vitest
 npm run typecheck   # tsc --noEmit
+npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data report
 ```
 
 ## Data
@@ -82,3 +86,5 @@ npm run typecheck   # tsc --noEmit
 - **Commission (P5):** lots = risk$ / (SL pips × pipValuePerLot + commissionPerLotRoundTrip). The value 0 is valid **only** for the approved Standard USD account. Never assume an Exness commission figure.
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
+- **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).
+- **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

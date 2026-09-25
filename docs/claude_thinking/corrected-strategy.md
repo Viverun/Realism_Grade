@@ -44,13 +44,13 @@ Lots = (Balance × Risk %) / (SL pips × Pip value per lot + Commission per lot,
 
 **Lot size, three ways:**
 
-| Case | Calculation | Lots (rounded down) | Actual risk |
+| Case | Calculation | Lots (rounded down) | Planned risk |
 |---|---|---|---|
 | PDF as written (no spread, no commission) | $10 / (20 × $10) = 0.0500 | **0.05** | $10.00 on paper, but really $10.50 (1.05%) once the spread is paid |
 | ✎ With a 1-pip spread (Standard account) | $10 / (21 × $10) = 0.0476 | **0.04** | $8.40 (0.84%) |
 | ✎ Hypothetical commission account ($7 round trip, **illustration only, not an Exness figure**), 20 pips | $10 / (20 × $10 + $7) = 0.0483 | **0.04** | 0.04 × $207 = $8.28 (0.83%) |
 
-Rounding down means the actual risk is always at or below the target.
+Rounding down means the planned risk is always at or below the target. The realized loss can be larger if the stop slips through a gap or news spike. See spec §9, "Planned vs realized risk".
 
 ## How V1 differs from this page (by design, not errors)
 

@@ -246,7 +246,7 @@ At send time `now`, for a signal on candle `i`:
 | V2 | **Quote freshness:** a live quote `q = {bid, ask, time}` exists and `now − q.time ≤ maxQuoteAgeSec` (default 10 s) | `no_quote` |
 | V3 | **Buy Limit placement:** `ENTRY ≤ q.ask − minLimitDistancePips · PIP`, and at least strictly `ENTRY < q.ask`. `minLimitDistancePips` defaults to 0; set it to the Exness stop level for the account if non-zero. | `entry_not_below_market` |
 | V4 | **Risk geometry:** `ENTRY > REF_SL` (§9) | `invalid_risk_geometry` |
-| V5 | **Risk cap:** actual risk after lot rounding `≤ maxRiskPercent` (§9) | `risk_exceeds_max` |
+| V5 | **Risk cap:** planned risk after lot rounding `≤ maxRiskPercent` (§9) | `risk_exceeds_max` |
 | V6 | **Cap / dedup / cooldown** (§10) | `capped` / `duplicate` / `cooldown` |
 
 - **Order of evaluation:** V1 → V6. Only a signal that passes all six is emailed, and only emailed signals count toward the daily cap and cooldown.
@@ -273,7 +273,8 @@ REF_SL        = min(low of pattern candles, EMA50[i]) − slBufferPips · PIP   
 SL_PIPS       = max((ENTRY − REF_SL) / PIP, minSlPips)
 LOTS_RAW      = (balance × riskPercent/100) / (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip)
 LOTS          = clamp(floor_to_step(LOTS_RAW, lotStep), minLot, maxLot)
-ACTUAL_RISK_% = LOTS × (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip) / balance × 100
+PLANNED_RISK_$ = LOTS × (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip)
+PLANNED_RISK_% = PLANNED_RISK_$ / balance × 100
 ```
 
 | Parameter | Default | Tag |
@@ -281,7 +282,7 @@ ACTUAL_RISK_% = LOTS × (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip) 
 | `account.currency` / `account.type` | USD / standard | [POLICY, D6] configuration assumption, not architecture |
 | `account.balance` | set by the trader, updated manually (no Exness API) | [POLICY] |
 | `riskPercent` | 1.0 | [PDF] (1–2%) |
-| `maxRiskPercent` | 2.0. Config above this is **rejected at load**; ACTUAL_RISK above it is rejected at V5. | [PDF] |
+| `maxRiskPercent` | 2.0. Config above this is **rejected at load**; PLANNED_RISK above it is rejected at V5. | [PDF] |
 | `pipValuePerLot` | 10 (USD per pip per 1.00 lot; EUR/USD, USD account, 100,000 units). **Read from config, never hard-coded.** | [ENG, D6] |
 | `commissionPerLotRoundTrip` | **0**, valid **only** for the approved Standard USD account (spread-only). A required config value with no implicit default: any other account must set its actual commission from the broker's current terms. No Exness commission figure is assumed anywhere. | [PDF-CORRECTION P5] |
 | `lotStep` / `minLot` / `maxLot` | 0.01 / 0.01 / config | [ENG] / [POLICY] safety cap |
@@ -289,8 +290,22 @@ ACTUAL_RISK_% = LOTS × (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip) 
 | `minSlPips` | 5 (prevents oversized lots) | [ENG] |
 
 - **Lots are always rounded down**, so risk never rounds up.
-- If `LOTS_RAW < minLot`, `LOTS = minLot`. That usually pushes ACTUAL_RISK above target; if it exceeds `maxRiskPercent`, the signal is rejected (V5).
-- **Caveat stated in the email:** the risk percentage only holds if the trader sets the recommended stop.
+- If `LOTS_RAW < minLot`, `LOTS = minLot`. That usually pushes PLANNED_RISK above target; if it exceeds `maxRiskPercent`, the signal is rejected (V5).
+- **Caveat stated in the email:** "Planned risk: $X (Y%). The actual loss can be larger if the stop slips (gaps/news) or the order is placed differently." The planned figure also assumes the trader sets the recommended stop.
+
+### Planned vs realized risk [POLICY]
+
+Everything this system computes is **planned** risk: `ENTRY − REF_SL` at the planned lot size. The **realized** loss on a stopped-out trade can differ:
+
+| Source | Direction | Notes |
+|---|---|---|
+| **Stop slippage** | Worse | A stop executes as a market order once the Bid reaches it. Through gaps (weekend open, news releases) it fills at the next available Bid, possibly well below `REF_SL`. **This is the main risk.** |
+| Limit entry fill | Same or better | A Buy Limit normally fills at its price or better, e.g. when price gaps below it. Confirm this in the account's execution terms. |
+| Manual placement | Either | The trader may edit the price, place it late, or use a market order instead. The system cannot see this (no Exness API). |
+| Lot rounding / `minLot` | Lower / higher | Rounding down lowers risk; being forced up to `minLot` raises it (bounded by V5). |
+| Stop not set | Unbounded | The PDF's "Risk Managed" condition is not met (P7). |
+
+The backtest measures the stop-slippage component (§11). The email and the log always label the figure as **planned**.
 - **PDF example:** $1,000 × 1% = $10, with an SL of 20 pips: $10 / (20 × $10) = **0.05 lots**. This is a test fixture.
 
 ---
@@ -322,6 +337,7 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
 5. **Outcome metrics** use only data **after the fill time** and never feed back into decisions:
    - Return after N candles (`outcomeHorizons`, e.g. 1H: 4, 8, 24).
    - MFE and MAE in pips over each horizon.
+   - **Stop exit and slippage:** a simulated stop exits at the **Bid of the first tick at or below `REF_SL`**. With tick data this captures gap slippage. Report **realized R vs planned R** per trade, plus the slippage distribution in pips. With candle-only data the exit is at `REF_SL` and marked approximate.
    - `+2R before −1R`, where R = SL_PIPS from §9. This is PDF-consistent (1:2 R:R) and reported as a research metric, **not** a win rate. If both levels are hit inside the same candle with candle-only data, it is counted as `ambiguous`.
 6. **Report per timeframe and variant:** signal count, signals per day, status breakdown, fill rate, and the outcome distributions.
 
@@ -370,7 +386,7 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
   "candle": { "ok": true, "patterns": ["pin_bar"] },
   "inWindow": true,
   "buySignal": true,
-  "entry": 1.13690, "refSl": 1.13555, "slPips": 13.5, "lots": 0.07, "actualRiskPct": 0.945,
+  "entry": 1.13690, "refSl": 1.13555, "slPips": 13.5, "lots": 0.07, "plannedRiskUsd": 9.45, "plannedRiskPct": 0.945,
   "configHash": "sha256:…",
   "status": "emailed"   // emailed | capped | cooldown | duplicate | no_signal | outside_window
                         // | stale_signal | no_quote | entry_not_below_market

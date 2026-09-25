@@ -1,5 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseTimestamp } from '../../src/data/csv.js';
@@ -7,6 +6,9 @@ import { ExnessTickCandleSource } from '../../src/data/exness-tick-source.js';
 import { parseExnessTickCsv } from '../../src/data/exness-ticks.js';
 import { OhlcCsvCandleSource, parseOhlcCsv } from '../../src/data/ohlc-csv.js';
 import { validateCandles } from '../../src/data/validate.js';
+import { useTempDirs } from '../helpers/tmp.js';
+
+const tempDir = useTempDirs();
 
 const t = (iso: string): number => Date.parse(iso);
 
@@ -41,7 +43,7 @@ describe('Exness tick CSV', () => {
   });
 
   it('ExnessTickCandleSource builds closed candles and respects dataEnd and asOf', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'rg-'));
+    const dir = await tempDir();
     const file = join(dir, 'ticks.csv');
     await writeFile(file, exnessCsv);
     const source = new ExnessTickCandleSource([file], t('2026-09-21T11:10:00Z'), 5);
@@ -73,7 +75,7 @@ describe('OHLC CSV', () => {
   });
 
   it('source returns only candles closed by asOf', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'rg-'));
+    const dir = await tempDir();
     const file = join(dir, 'h1.csv');
     await writeFile(file, csv);
     const source = new OhlcCsvCandleSource({ H1: file }, 5);
@@ -82,7 +84,7 @@ describe('OHLC CSV', () => {
   });
 
   it('source rejects corrupt data', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'rg-'));
+    const dir = await tempDir();
     const file = join(dir, 'bad.csv');
     await writeFile(file, 'time,open,high,low,close\n2026-09-21T10:00:00Z,1.1,1.0,1.2,1.1\n');
     const source = new OhlcCsvCandleSource({ H1: file }, 5);

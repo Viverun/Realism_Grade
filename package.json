@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "validate:ticks": "tsx scripts/validate-ticks.ts"
   },
   "dependencies": {
     "yaml": "^2.9.1",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }

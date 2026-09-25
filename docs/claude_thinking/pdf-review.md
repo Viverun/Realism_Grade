@@ -65,7 +65,7 @@
   - Added `account.commissionPerLotRoundTrip`. It is **0, and 0 only because the approved account is Standard USD.**
   - It is a required config value with no hidden default. Any other account type must set it to that account's actual commission, taken from the broker's current terms.
   - **We make no claim about what Exness charges.** The $7 round-trip used in `corrected-strategy.md` is a hypothetical, for illustration only.
-  - The spec's §9 formula and ACTUAL_RISK now include it.
+  - The spec's §9 formula and PLANNED_RISK now include it.
 
 ### P6: The PDF enters at market; V1 uses a Buy Limit, and nothing compares the two (Medium, corrected)
 - **The PDF says:** a market buy at the next candle's open.
