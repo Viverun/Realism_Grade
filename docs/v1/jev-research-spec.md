@@ -146,7 +146,7 @@ These solve different problems.
 | `src/jev/client.ts` | `JevJudge` interface; `TypeSafeJudge` (`POST /v1/systemone`, Bearer key from `JEV_API_KEY`, retries 408/429/5xx, validates every answer); `FakeJudge` (deterministic, carries no information) for tests and dry runs. |
 | `src/jev/population.ts` | The §4 population (M30/H1 all tiers, M5/M15 tier A; in window; trading days) and tick-based labels with the V1 Buy Limit model. |
 | `src/jev/log.ts` | Append-only JSONL log (`docs/jev/jev-log.jsonl`, committed: git history timestamps every judgment before its outcome is known). |
-| `src/jev/logistic.ts` | The logistic baseline (standardised, Newton–IRLS, L2). Frozen coefficients: `config/jev-baseline-v1.json`, fitted on 2015–2021 by `npm run jev:fit-baseline`. |
+| `src/jev/logistic.ts` | The logistic baseline (standardised, Newton–IRLS, L2). **Frozen 2026-09-25** in `config/jev-baseline-v1.json`: fitted on 2015–2021 by `npm run jev:fit-baseline`, 78,694 population candles → 41,111 filled and resolved (10,553 reached +2R first, 25.7%). Committed before the primary window opens. |
 | `src/jev/metrics.ts` | AUC, Brier skill, ECE/reliability, tercile spread, day-block bootstrap, and the PASS/FAIL/INSUFFICIENT_DATA verdict. |
 | `src/jev/protocol.ts` | All §4 constants, including the primary window start. |
 | `scripts/jev.ts` | `probe`, `fit-baseline`, `score`, `evaluate`. `score` refuses any candle before the primary window unless `--fake`. |
