@@ -94,6 +94,7 @@ async function main(): Promise<void> {
     const parser = new ExnessTickParser(digits);
     const collector = new TickStatsCollector({
       pointsPerPip,
+      digits,
       inWindow,
       gapThresholdMs: args.gapMin * 60_000,
       jumpThresholdPips: args.jumpPips,
@@ -149,8 +150,7 @@ async function main(): Promise<void> {
     if (s.nonPositive) failures.push(`${name}: ${s.nonPositive} non-positive prices`);
     if (s.crossed.count) warnings.push(`${name}: ${s.crossed.count} crossed quotes (ask < bid)`);
     if (Object.keys(s.symbols).length > 1) warnings.push(`${name}: more than one symbol (${Object.keys(s.symbols).join(', ')})`);
-    const maxDecimals = Math.max(...Object.keys(s.bidDecimals).map(Number), ...Object.keys(s.askDecimals).map(Number));
-    if (maxDecimals > digits) warnings.push(`${name}: prices with ${maxDecimals} decimals; config digits = ${digits} (rounded)`);
+    if (s.precisionLoss.count) warnings.push(`${name}: ${s.precisionLoss.count} prices have real precision beyond ${digits} digits (e.g. ${s.precisionLoss.example}); rounding changes them`);
     if (s.gaps.intraweek) warnings.push(`${name}: ${s.gaps.intraweek} weekday gaps > ${args.gapMin} min (holidays or missing data)`);
     if (s.jumps.count) warnings.push(`${name}: ${s.jumps.count} tick-to-tick bid jumps > ${args.jumpPips} pips`);
   }
@@ -206,6 +206,7 @@ async function main(): Promise<void> {
     lines.push(`- **Coverage:** ${utc(s.firstTime)} → ${utc(s.lastTime)} (Dubai ${s.firstTime === null ? '—' : local(s.firstTime)} → ${s.lastTime === null ? '—' : local(s.lastTime)}), ${Object.keys(s.ticksPerDay).length} UTC days with ticks`);
     lines.push(`- **Ordering:** ${s.outOfOrder} out-of-order, ${s.duplicateTimestamps.toLocaleString('en-US')} ticks sharing the previous tick's timestamp`);
     lines.push(`- **Price decimals:** bid ${JSON.stringify(s.bidDecimals)}, ask ${JSON.stringify(s.askDecimals)}`);
+    lines.push(`- **Precision:** ${s.floatNoise.count.toLocaleString('en-US')} prices carry float-formatting noise${s.floatNoise.example ? ` (e.g. \`${s.floatNoise.example}\`)` : ''} and round exactly to ${digits} digits (harmless); ${s.precisionLoss.count} have real extra precision.`);
     lines.push(`- **Quote sanity:** ${s.crossed.count} crossed (ask < bid), ${s.zeroSpread.toLocaleString('en-US')} zero-spread, ${s.nonPositive} non-positive`);
     lines.push(`- **Gaps > ${args.gapMin} min:** ${s.gaps.weekend} weekend, ${s.gaps.intraweek} weekday`);
     for (const g of s.gaps.intraweekExamples) lines.push(`  - ${utc(g.from)} → ${utc(g.to)} (${((g.to - g.from) / 60_000).toFixed(0)} min)`);

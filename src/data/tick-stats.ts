@@ -3,6 +3,8 @@ import type { ExnessTickRow } from './exness-ticks.js';
 
 export interface TickStatsOptions {
   pointsPerPip: number;
+  /** Instrument digits; used to tell float-formatting noise from real extra precision. */
+  digits: number;
   /** Local-time classifier for the trading window (spreads are also reported inside it). */
   inWindow: (utcMs: number) => boolean;
   /** Gaps between consecutive ticks longer than this are reported. */
@@ -47,6 +49,10 @@ export interface TickStats {
   duplicateTimestamps: number;
   bidDecimals: Record<number, number>;
   askDecimals: Record<number, number>;
+  /** Prices with more than `digits` decimals that still round exactly (e.g. 1.1381999999999999). */
+  floatNoise: { count: number; example: string | null };
+  /** Prices with genuine sub-point precision that rounding changes. */
+  precisionLoss: { count: number; example: string | null };
   crossed: { count: number; examples: string[] };
   zeroSpread: number;
   nonPositive: number;
@@ -121,6 +127,8 @@ export class TickStatsCollector {
     duplicateTimestamps: 0,
     bidDecimals: {},
     askDecimals: {},
+    floatNoise: { count: 0, example: null },
+    precisionLoss: { count: 0, example: null },
     crossed: { count: 0, examples: [] },
     zeroSpread: 0,
     nonPositive: 0,
@@ -158,6 +166,13 @@ export class TickStatsCollector {
     const ad = decimals(row.rawAsk);
     s.bidDecimals[bd] = (s.bidDecimals[bd] ?? 0) + 1;
     s.askDecimals[ad] = (s.askDecimals[ad] ?? 0) + 1;
+    for (const [raw, dec] of [[row.rawBid, bd], [row.rawAsk, ad]] as const) {
+      if (dec <= this.options.digits) continue;
+      const scaled = Number(raw) * 10 ** this.options.digits;
+      const bucket = Math.abs(scaled - Math.round(scaled)) < 1e-6 ? s.floatNoise : s.precisionLoss;
+      bucket.count += 1;
+      bucket.example ??= raw;
+    }
     if (tick.bid <= 0 || tick.ask <= 0) s.nonPositive += 1;
 
     const spread = tick.ask - tick.bid;

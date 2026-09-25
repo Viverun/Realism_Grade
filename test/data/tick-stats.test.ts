@@ -4,7 +4,7 @@ import { TickStatsCollector, timestampShape } from '../../src/data/tick-stats.js
 
 function run(lines: string[], inWindow: (ms: number) => boolean = () => true) {
   const parser = new ExnessTickParser(5);
-  const collector = new TickStatsCollector({ pointsPerPip: 10, inWindow, gapThresholdMs: 5 * 60_000, jumpThresholdPips: 20 });
+  const collector = new TickStatsCollector({ pointsPerPip: 10, digits: 5, inWindow, gapThresholdMs: 5 * 60_000, jumpThresholdPips: 20 });
   for (const line of lines) {
     try {
       const row = parser.parseRow(line);
@@ -75,6 +75,16 @@ describe('TickStatsCollector', () => {
     );
     expect(stats.spread?.count).toBe(2);
     expect(stats.spreadInWindow).toMatchObject({ count: 1, medianPips: 0.6 });
+  });
+
+  it('separates float-formatting noise from real extra precision', () => {
+    const stats = run([
+      HEADER,
+      row('2026-09-21 10:00:00Z', '1.1381999999999999', '1.13826'),
+      row('2026-09-21 10:00:01Z', '1.138205', '1.13826'),
+    ]);
+    expect(stats.floatNoise).toEqual({ count: 1, example: '1.1381999999999999' });
+    expect(stats.precisionLoss).toEqual({ count: 1, example: '1.138205' });
   });
 
   it('describes timestamp shapes', () => {
