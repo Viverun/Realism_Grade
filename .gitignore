@@ -4,3 +4,5 @@ coverage/
 *.log
 .env
 data/raw/
+docs/data/Exness_EURUSD_2026.csv
+data/backtest/

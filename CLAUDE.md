@@ -13,12 +13,12 @@ Project context for Claude Code sessions in this repository.
   1. Rules ✅
   2. Data layer ✅
   3. EMA/RSI ✅
-  4. Pullback and candle detection
-  5. Strategy engine
-  6. Backtest
-  7. Entry and lots
+  4. Pullback and candle detection ✅
+  5. Strategy engine ✅
+  6. Backtest ✅ (engine built; first run on 2026 data pending)
+  7. Entry and lots ✅
   8. Email
-  9. Cap and dedup
+  9. Cap and dedup ✅ (`AlertPolicy`; the live runner will reuse it)
   10. Paper/live
 
 ## Source-of-truth docs
@@ -29,6 +29,7 @@ Project context for Claude Code sessions in this repository.
 | `docs/v1/strategy-rules-v1.md` | **Mechanical rule spec.** APPROVED (D1–D6). The strategy code must match it exactly. |
 | `docs/foundation/EUR_USD Entry Strategy Guide.pdf` | Ahmad's original strategy. It is truncated at "Applying the Lot Size Formula:". |
 | `config/v1.yaml` | Every parameter, each tagged with its provenance |
+| `docs/v1/backtest-dataset-2026.md` | The initial backtest dataset: 2026 only, through 2026-09-24, partial year, **preliminary results only**. 2026-09-25 is the loader-validation file only. |
 | `docs/claude_thinking/` | Claude's reviews and reasoning; advisory. `pdf-review.md` lists the PDF errors (P1–P8), `corrected-strategy.md` is the corrected rewrite. **The original PDF and context-V1.md are never edited.** |
 
 ## Hard rules for code
@@ -55,7 +56,11 @@ src/core/        timezone.ts (fast UTC→local clock, HH:MM parsing)
 src/data/        sources.ts (CandleSource/QuoteSource interfaces), tick-aggregator.ts, resample.ts,
                  validate.ts, exness-ticks.ts (Exness tick CSV/.zip), exness-tick-source.ts, ohlc-csv.ts,
                  tick-stats.ts (data-validation statistics)
-scripts/         validate-ticks.ts (tick-file validation report)
+src/strategy/    params.ts (config → points), rules.ts (4 rules), sizing.ts (entry, ref stop, lots),
+                 engine.ts (decideAt = live path, decideAll = batch; pure, no look-ahead)
+src/alerts/      policy.ts (daily cap, dedup, cooldown; chronological, causal)
+src/backtest/    tick-store.ts (columnar ticks), execution.ts, outcomes.ts, runner.ts, variants.ts, summary.ts
+scripts/         validate-ticks.ts (tick-file validation report), backtest.ts (backtest report)
 src/indicators/  ema.ts (SMA-seeded), rsi.ts (Wilder, MT5 edge cases), index.ts
 test/            mirrors src/; helpers/random.ts is a seeded PRNG
 ```
@@ -69,6 +74,7 @@ npm install
 npm test            # vitest
 npm run typecheck   # tsc --noEmit
 npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data report
+npm run backtest:2026      # preliminary backtest → docs/backtest/2026-preliminary.md
 ```
 
 ## Data
@@ -87,4 +93,6 @@ npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data repor
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
 - **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).
+- **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
+- **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.
