@@ -56,16 +56,19 @@ The snapshot schema gets a `snapshotVersion`. Any change to it restarts the test
 
 Every question is independent and asked separately, so one answer can't anchor another.
 
-| ID | Question (paraphrased; exact text frozen at launch) | Type |
+| ID | Question (paraphrased; exact text frozen at launch) | Jev primitive |
 |---|---|---|
-| Q1 | Probability that price reaches **entry + 2R before entry − 1R**, where R = the planned stop distance, for a long entered at the planned Buy Limit | probability 0–1 (**primary**) |
-| Q2 | Is the uptrend likely to continue over the next 8 candles? | probability |
-| Q3 | Is the pullback exhausted (sellers losing control)? | probability |
-| Q4 | Market regime | choice: trending / ranging / volatile-choppy |
-| Q5 | Is momentum confirming or diverging? | choice: confirming / neutral / diverging |
+| Q1 | Will price reach **entry + 2R before entry − 1R**, where R = the planned stop distance, for a long entered at the planned Buy Limit? | **Noul** (P(yes)) — **primary** |
+| Q2 | Will the uptrend continue over the next 8 candles? | Noul |
+| Q3 | Is the pullback exhausted (sellers losing control)? | Noul |
+| Q4 | Market regime | Choice: trending / ranging / volatile-choppy |
+| Q5 | Is momentum confirming or diverging? | Choice: confirming / neutral / diverging |
 
 - **Only Q1 is primary evidence;** Q2–Q5 are exploratory.
-- **Settings:** temperature, or its equivalent, as deterministic as the API allows.
+- **API (from the owner-supplied TypeSafe docs):** `POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`, text-only `state` plus a list of typed questions (Choice / Score / Noul). Questions within one request are answered independently, so the whole battery is **one request per snapshot** (~800 requests/month at 40 samples/day).
+- **Pinned model:** `jev-latest` is a moving alias. The log records the model identifier the API reports; if it changes mid-test, the clock restarts (§5).
+- **Confidence:** every answer's reported `confidence` is logged but is **not** used for gating in phase A; it is evaluated as an exploratory calibration check.
+- **Settings:** as deterministic as the API allows.
 - **Logged every time:** model identifier, `promptHash`, `snapshotVersion` and the raw responses.
 - **No tools:** Jev gets no browsing, search or other tools, so it can't look up what happened.
 
@@ -130,13 +133,13 @@ These solve different problems.
 
 ## 7. Needed from the owner before implementation
 1. **Approve D11** (this spec), including the start date of the primary window.
-2. **Jev access:** API key, pricing and rate limits, and the documented **training/knowledge cutoff**. The start date must be after it.
-3. **A cost budget per month.** At about 40 samples/day × 5 questions, that is about 4,000 calls/month; Q1 alone is about 800.
+2. **Jev access:** the API key as the environment secret `JEV_API_KEY` (never in chat or git), pricing and rate limits, and the documented **training/knowledge cutoff**. The start date must be after it. The API shape is now known (§3); the cutoff and pricing are still missing.
+3. **A cost budget per month.** At about 40 samples/day, that is about 800 requests/month (one request carries all 5 questions).
 4. **A monthly Exness tick export** from the start date onwards, or the live data provider decision, if real-time scoring is wanted.
 
 ## 8. Implementation outline (once approved)
 - `src/jev/snapshot.ts`: pure function from (Series, i, Decision) to Snapshot, with a unit-tested `snapshotVersion`.
-- `src/jev/client.ts`: a `JevJudge` interface. The real client plus a deterministic fake for tests. It is written against the actual API once access is provided; no API details are assumed here.
+- `src/jev/client.ts`: a `JevJudge` interface. The real client plus a deterministic fake for tests. It targets `POST /v1/systemone` (§3) and reads the key only from `JEV_API_KEY`.
 - `src/jev/log.ts`: an append-only JSONL log of snapshot, answers, versions and V1 decision.
 - `scripts/jev-score.ts`: batch-scores post-cutoff candles.
 - `scripts/jev-evaluate.ts`: joins the log with tick-based labels, computes the §4 metrics and the PASS/FAIL verdict, and writes a report.
