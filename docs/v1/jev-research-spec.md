@@ -151,6 +151,11 @@ These solve different problems.
 | `src/jev/protocol.ts` | All §4 constants, including the primary window start. |
 | `scripts/jev.ts` | `probe`, `fit-baseline`, `score`, `evaluate`. `score` refuses any candle before the primary window unless `--fake`. |
 
+**Pilot (2026-09-25, operational only, never evidence):** `npm run jev:score -- <zips> --start 2026-09-18T00:00:00Z --end 2026-09-25T00:00:00Z --pilot`, report [`../jev/pilot.md`](../jev/pilot.md), log `docs/jev/jev-log.pilot.jsonl`. A pilot may only cover candles ending at or before the window start (`checkScoringRange`), and its report has no outcome metrics.
+- **Result:** 235/235 requests succeeded, all answered by **`jev-1.13.0`** (the concrete model behind `jev-latest` at launch; a different model in the evidence log restarts the clock). Latency median 124 ms (p95 range under 320 ms). About 1,300 input and 155 output tokens per request.
+- **Q1 is not degenerate:** 0.18–0.39, sd 0.037. Answers come rounded to 0.01, so many ties. AUC uses average ranks; the tercile spread breaks ties in chronological order (deterministic).
+- **Decision:** no wiring problem, so the battery, snapshot and population are **frozen as is** from the window start (2026-09-28).
+
 **Monthly routine (batch mode, no live feed needed):**
 1. Add the new month's Exness tick zip to `docs/data/`.
 2. `npm run jev:score -- docs/data/Exness_EURUSD_2026_0[7-9].zip docs/data/Exness_EURUSD_2026_1*.zip --start 2026-09-28T00:00:00Z --end <first day of next month>`. Include about 3 months before the start for warm-up. Already-logged samples are skipped.

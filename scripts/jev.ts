@@ -7,7 +7,11 @@
  *   tsx scripts/jev.ts fit-baseline <2015–2021 tick files…> [--out config/jev-baseline-v1.json]
  *       Fits the frozen logistic baseline on 2015–2021 only (§4).
  *   tsx scripts/jev.ts score <tick files…> --start ISO --end ISO [--log docs/jev/jev-log.jsonl]
- *       [--fake] [--limit N] [--concurrency 4]
+ *       [--fake | --pilot] [--limit N] [--concurrency 4]
+ *       --pilot: real API on candles ending at or before the primary window start, logged to
+ *       jev-log.pilot.jsonl; an operational check, never evidence.
+ *   tsx scripts/jev.ts pilot-report [--log docs/jev/jev-log.pilot.jsonl] [--out docs/jev/pilot.md]
+ *       Operational summary of a pilot log (no outcomes, so nothing can be tuned on it).
  *       Scores every population candle closing in [start, end) that is not yet in the log.
  *       Include ~3 months of ticks before --start for indicator warm-up (H1 needs 1,000 candles).
  *   tsx scripts/jev.ts evaluate <tick files…> --end ISO [--log …] [--baseline …] [--out docs/jev/validation.md]
@@ -24,7 +28,8 @@ import { appendJevLog, readJevLog, type JevLogRecord } from '../src/jev/log.js';
 import { fitLogistic, predictLogistic, type LogisticModel } from '../src/jev/logistic.js';
 import { evaluate, fmt, type EvalSample } from '../src/jev/metrics.js';
 import { buildPopulation, labelPlan, type Label, type Sample } from '../src/jev/population.js';
-import { BASELINE_PERIOD, PROTOCOL } from '../src/jev/protocol.js';
+import { BASELINE_PERIOD, checkScoringRange, PROTOCOL, type ScoringMode } from '../src/jev/protocol.js';
+import { DEGENERATE_SD, summarisePilot, type Spread } from '../src/jev/pilot.js';
 import { featureNames, featureVector, SNAPSHOT_VERSION } from '../src/jev/snapshot.js';
 
 interface Args {
@@ -37,13 +42,14 @@ interface Args {
   out: string | null;
   config: string;
   fake: boolean;
+  pilot: boolean;
   limit: number;
   concurrency: number;
 }
 
 function parseArgs(argv: string[]): Args {
   const [command = '', ...rest] = argv;
-  const a: Args = { command, files: [], start: null, end: null, log: 'docs/jev/jev-log.jsonl', baseline: 'config/jev-baseline-v1.json', out: null, config: 'config/v1.yaml', fake: false, limit: Infinity, concurrency: 4 };
+  const a: Args = { command, files: [], start: null, end: null, log: 'docs/jev/jev-log.jsonl', baseline: 'config/jev-baseline-v1.json', out: null, config: 'config/v1.yaml', fake: false, pilot: false, limit: Infinity, concurrency: 4 };
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k]!;
     const value = (): string => {
@@ -58,6 +64,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--out') a.out = value();
     else if (arg === '--config') a.config = value();
     else if (arg === '--fake') a.fake = true;
+    else if (arg === '--pilot') a.pilot = true;
     else if (arg === '--limit') a.limit = Number(value());
     else if (arg === '--concurrency') a.concurrency = Math.max(1, Number(value()));
     else if (arg.startsWith('--')) throw new Error(`Unknown option ${arg}`);
@@ -138,11 +145,11 @@ async function score(a: Args, config: AppConfig): Promise<void> {
   if (!a.start || !a.end) throw new Error('score needs --start and --end');
   const startMs = Date.parse(a.start);
   const endMs = Date.parse(a.end);
-  if (!a.fake && startMs < Date.parse(PROTOCOL.primaryWindowStart)) {
-    throw new Error(`Refusing to score before the primary window start ${PROTOCOL.primaryWindowStart}: earlier candles may be in Jev's training data (spec §4).`);
-  }
+  if (a.fake && a.pilot) throw new Error('--fake and --pilot are mutually exclusive');
+  const mode: ScoringMode = a.fake ? 'fake' : a.pilot ? 'pilot' : 'forward';
+  checkScoringRange(startMs, endMs, mode);
   const judge: JevJudge = a.fake ? new FakeJudge() : new TypeSafeJudge();
-  const logPath = a.fake ? a.log.replace(/\.jsonl$/, '.fake.jsonl') : a.log;
+  const logPath = mode === 'forward' ? a.log : a.log.replace(/\.jsonl$/, `.${mode}.jsonl`);
   const done = new Set((await readJevLog(logPath)).filter((r) => r.answers && r.promptHash === PROMPT_HASH).map((r) => r.id));
   const { candles } = await loadData(a.files, config, endMs);
   const hash = configHash(config);
@@ -229,14 +236,52 @@ async function evaluateCmd(a: Args, config: AppConfig): Promise<void> {
   process.stdout.write(`Report: ${out} (verdict ${e.verdict})\n`);
 }
 
+async function pilotReport(a: Args): Promise<void> {
+  const path = a.log.endsWith('.pilot.jsonl') ? a.log : a.log.replace(/\.jsonl$/, '.pilot.jsonl');
+  const records = await readJevLog(path);
+  if (!records.length) throw new Error(`No pilot records in ${path}`);
+  const s = summarisePilot(records, PRIMARY_QUESTION);
+  const first = Math.min(...records.map((r) => r.closeTime));
+  const last = Math.max(...records.map((r) => r.closeTime));
+  const n = (v: number, d = 3): string => v.toFixed(d);
+  const sp = (x: Spread | null, d = 3): string => (x ? `${n(x.min, d)} / ${n(x.q1, d)} / ${n(x.median, d)} / ${n(x.q3, d)} / ${n(x.max, d)} (mean ${n(x.mean, d)}, sd ${n(x.sd, d)}, n=${x.n})` : '—');
+  const kv = (m: Record<string, number>): string => Object.entries(m).sort().map(([k, v]) => `${k} ${v}`).join(', ') || '—';
+  const L: string[] = [];
+  L.push('# Jev pilot: operational check (NOT evidence)', '');
+  L.push(`> **Pilot only.** Real API on pre-window candles (${iso(first).slice(0, 16)}Z → ${iso(last).slice(0, 16)}Z), all before the primary window start ${PROTOCOL.primaryWindowStart}. These records are in \`${basename(path)}\`, never in the evidence log, and \`evaluate\` ignores them. This report deliberately has **no outcome or accuracy metrics**, so nothing can be tuned on it (spec §4, no peeking).`, '');
+  L.push(`- Versions: promptHash \`${PROMPT_HASH}\`, snapshot \`${SNAPSHOT_VERSION}\`, requested model \`${records[0]!.requestedModel}\`.`);
+  L.push(`- **Requests:** ${s.records} logged, **${s.ok} succeeded, ${s.failed} failed**.`);
+  L.push(`- **Model(s) that answered:** ${kv(s.models)}.`);
+  L.push(`- Samples by timeframe: ${kv(s.byTimeframe)}; by tier: ${kv(s.byTier)}.`, '');
+  if (s.failed) {
+    L.push('## Errors', '', '| Error | Count |', '|---|---|');
+    for (const [e, c] of Object.entries(s.errors)) L.push(`| ${e.replace(/\|/g, '\\|')} | ${c} |`);
+    L.push('');
+  }
+  L.push('## Operations', '', '| Metric | min / Q1 / median / Q3 / max |', '|---|---|');
+  L.push(`| Latency (ms) | ${sp(s.latencyMs, 0)} |`);
+  L.push(`| Input tokens / request | ${sp(s.inputTokens, 0)} |`);
+  L.push(`| Output tokens / request | ${sp(s.outputTokens, 0)} |`, '');
+  L.push('## Answer spread (no outcomes)', '', '| Question | min / Q1 / median / Q3 / max |', '|---|---|');
+  for (const [q, x] of Object.entries(s.nouls)) L.push(`| ${q} | ${sp(x)} |`);
+  L.push('', '| Choice question | Counts |', '|---|---|');
+  for (const [q, m] of Object.entries(s.choices)) L.push(`| ${q} | ${kv(m)} |`);
+  L.push('', `**Q1 degeneracy check (sd < ${DEGENERATE_SD}):** ${s.degenerateQ1 ? '**FAIL: Jev is not reacting to the snapshot; fix before the window opens.**' : 'pass: Q1 varies across snapshots.'}`, '');
+  const out = a.out ?? 'docs/jev/pilot.md';
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(out, `${L.join('\n')}\n`);
+  process.stdout.write(`Report: ${out}\n`);
+}
+
 async function main(): Promise<void> {
   const a = parseArgs(process.argv.slice(2));
   if (a.command === 'probe') return probe();
+  if (a.command === 'pilot-report') return pilotReport(a);
   const config = await loadConfig(a.config);
   if (a.command === 'fit-baseline') return fitBaseline(a, config);
   if (a.command === 'score') return score(a, config);
   if (a.command === 'evaluate') return evaluateCmd(a, config);
-  throw new Error('Usage: jev.ts probe | fit-baseline | score | evaluate (see file header)');
+  throw new Error('Usage: jev.ts probe | fit-baseline | score | pilot-report | evaluate (see file header)');
 }
 
 main().catch((error: unknown) => {

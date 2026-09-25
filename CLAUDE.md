@@ -97,6 +97,7 @@ npm run jev:probe          # check JEV_API_KEY + network (GET /v1/models)
 npm run jev:fit-baseline   # frozen logistic baseline on 2015–2021 → config/jev-baseline-v1.json
 npm run jev:score -- <zips> --start 2026-09-28T00:00:00Z --end <ISO>   # forward scoring only
 npm run jev:evaluate -- <zips> --end <ISO>   # D11 metrics + verdict → docs/jev/validation.md
+npm run jev:score -- <zips> --start <ISO> --end <≤ 2026-09-28> --pilot; npm run jev:pilot-report   # ops check only
 ```
 
 ## Data
@@ -136,5 +137,5 @@ npm run jev:evaluate -- <zips> --end <ISO>   # D11 metrics + verdict → docs/je
 - **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
 - **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
 - **Email:** provider, sender and recipients come only from env vars (`EMAIL_PROVIDER`, `EMAIL_FROM`, `EMAIL_TO`, `SMTP_*`, `RESEND_API_KEY`; see `.env.example`). Never enable live alerts without an explicit owner decision.
-- **Jev (D11):** the API key comes only from the env var `JEV_API_KEY`; never commit, log or echo it. Jev may only score candles from 2026-09-28 onwards (training-data contamination). Any change to the battery, snapshot, model or population restarts the test clock.
+- **Jev (D11):** the API key comes only from the env var `JEV_API_KEY`; never commit, log or echo it. Jev may only score candles from 2026-09-28 onwards (training-data contamination). Any change to the battery, snapshot, model or population restarts the test clock. The model at launch is `jev-1.13.0` (pilot, `docs/jev/pilot.md`); pilot logs are never evidence.
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

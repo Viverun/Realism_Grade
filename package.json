@@ -26,6 +26,7 @@
     "jev:probe": "tsx scripts/jev.ts probe",
     "jev:fit-baseline": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/jev.ts fit-baseline docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[01]*.zip",
     "jev:score": "tsx scripts/jev.ts score",
+    "jev:pilot-report": "tsx scripts/jev.ts pilot-report",
     "jev:evaluate": "tsx scripts/jev.ts evaluate",
     "backtest:full": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/backtest.ts docs/data/Exness_EURUSD_201[5-9]*.zip docs/data/Exness_EURUSD_202[0-3]*.zip docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025_??.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2015-2026.md --json data/backtest/2015-2026.json --title 'Backtest: EUR/USD 2015-08 to 2026-09-24 (V1, per timeframe)'"
   },

@@ -8,6 +8,9 @@ import { FakeJudge, JevApiError, parseResponse, TypeSafeJudge } from '../../src/
 import { fitLogistic, predictLogistic } from '../../src/jev/logistic.js';
 import { auc, brierSkillVsBaseRate, evaluate, reliability, tercileSpread, type EvalSample } from '../../src/jev/metrics.js';
 import { buildPopulation } from '../../src/jev/population.js';
+import type { JevLogRecord } from '../../src/jev/log.js';
+import { spread, summarisePilot } from '../../src/jev/pilot.js';
+import { checkScoringRange, PROTOCOL } from '../../src/jev/protocol.js';
 import { buildSnapshot, featureNames, featureVector, SNAPSHOT_MIN_INDEX, snapshotReady } from '../../src/jev/snapshot.js';
 import { smallConfig } from '../helpers/fixtures.js';
 import { trendingCandles } from '../helpers/series.js';
@@ -192,5 +195,52 @@ describe('logistic baseline', () => {
     expect(Math.abs(model.coef[2]!)).toBeLessThan(0.3);
     expect(predictLogistic(model, [9, 0.5])).toBeGreaterThan(0.9);
     expect(predictLogistic(model, [1, 0.5])).toBeLessThan(0.1);
+  });
+});
+
+describe('scoring range guard', () => {
+  const w = Date.parse(PROTOCOL.primaryWindowStart);
+  const day = 86_400_000;
+
+  it('forward scoring refuses any candle before the window', () => {
+    expect(() => checkScoringRange(w - day, w + day, 'forward')).toThrow(/Refusing/);
+    expect(() => checkScoringRange(w, w + day, 'forward')).not.toThrow();
+  });
+
+  it('a pilot must end at or before the window start', () => {
+    expect(() => checkScoringRange(w - 7 * day, w, 'pilot')).not.toThrow();
+    expect(() => checkScoringRange(w - 7 * day, w + 1, 'pilot')).toThrow(/pilot must end/);
+  });
+
+  it('fake allows any range; empty or reversed ranges are rejected', () => {
+    expect(() => checkScoringRange(w - day, w + day, 'fake')).not.toThrow();
+    expect(() => checkScoringRange(w, w, 'fake')).toThrow(/Invalid/);
+  });
+});
+
+describe('pilot summary', () => {
+  const rec = (q1: number | null, extra: Partial<JevLogRecord> = {}): JevLogRecord =>
+    ({
+      timeframe: 'H1',
+      tier: 'B',
+      model: q1 === null ? null : 'jev-x',
+      latencyMs: q1 === null ? null : 120,
+      usage: { input_tokens: 800, output_tokens: 10 },
+      error: q1 === null ? 'Jev HTTP 500: boom' : null,
+      answers: q1 === null ? null : { [PRIMARY_QUESTION]: { type: 'noul', noul: q1 }, q4_regime: { type: 'choice', choice: 'trending', confidence: 0.8, probabilities: {} } },
+      ...extra,
+    }) as JevLogRecord;
+
+  it('counts successes, errors, models and answer spread, with no outcomes', () => {
+    const s = summarisePilot([rec(0.2), rec(0.4), rec(0.6), rec(null)], PRIMARY_QUESTION);
+    expect(s).toMatchObject({ records: 4, ok: 3, failed: 1, models: { 'jev-x': 3 }, choices: { q4_regime: { trending: 3 } }, degenerateQ1: false });
+    expect(s.nouls[PRIMARY_QUESTION]!.median).toBeCloseTo(0.4);
+    expect(Object.keys(s.errors)[0]).toContain('500');
+    expect(JSON.stringify(s)).not.toMatch(/target|stop|rMultiple/);
+  });
+
+  it('flags a degenerate Q1', () => {
+    expect(summarisePilot([rec(0.3), rec(0.3), rec(0.305)], PRIMARY_QUESTION).degenerateQ1).toBe(true);
+    expect(spread([1, 2, 3, 4, 5])).toMatchObject({ min: 1, q1: 2, median: 3, q3: 4, max: 5 });
   });
 });
