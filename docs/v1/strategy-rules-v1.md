@@ -15,6 +15,7 @@ Every rule and parameter carries a tag, so we never confuse what the PDF says wi
 | **[PDF-INTERP]** | The PDF is ambiguous or internally inconsistent here; this is our explicit interpretation. The PDF baseline is recorded next to it. |
 | **[ENG]** | An engineering parameter we introduced to make a rule mechanical. Tunable, and compared in the backtest. |
 | **[POLICY]** | A V1 product, alert or execution policy. It is not strategy logic and does not come from the PDF. |
+| **[PDF-CORRECTION]** | A documented correction of an error or omission in the PDF. The PDF itself is unchanged; the reasoning is in `docs/claude_thinking/pdf-review.md` (finding IDs P1–P8). |
 
 Jev (AI) is **outside the V1 decision path entirely**. Nothing in this document can be overridden by Jev.
 
@@ -226,6 +227,10 @@ ENTRY = close[i] − entryOffsetPips · PIP            (integer points)
 - The PDF enters at market on the next candle's open (≈ `close[i]`) [PDF]. V1 uses a Buy Limit a few pips below instead [POLICY, context-V1].
 - **Order validity:** the email states "valid until the close of the next candle (Dubai time)". This is **[POLICY]** (a V1 alert/execution policy); it is **not in the PDF**. V1 doesn't track fills; the expiry is advisory. `entryValidCandles = 1`.
 - **Spread note:** candle prices are Bid, but a Buy Limit fills when **Ask ≤ ENTRY**. For a fill, Bid must therefore drop to about `ENTRY − spread`.
+- **PDF market-entry baseline (backtest only)** [PDF] entry, [PDF-CORRECTION P4, P6] fill:
+  - When `backtest.includePdfMarketBaseline` is true, the backtest also evaluates the PDF's own entry: a market buy at the start of the next candle.
+  - It is filled at the **Ask**: the first tick's Ask at or after `P` (§11), or the next candle's Bid open + `assumedSpreadPips` without Ask data. SL_PIPS is measured from that fill.
+  - It is **not** an `entryMode` value. **V1 production alerts are always Buy Limits.**
 
 ---
 
@@ -259,14 +264,16 @@ At send time `now`, for a signal on candle `i`:
 Lot Size = (Account Balance × Risk %) / (SL Pips × Pip Value)            [PDF]
 ```
 
-V1 places no SL. The formula still needs an SL distance, so a **reference stop** follows the PDF's placement rule ("safely below the pin bar's wick and the 50 EMA") [PDF-INTERP]. It is used **only for sizing**, and shown in the email as information, never placed or managed [POLICY].
+Corrected to include per-lot commission [PDF-CORRECTION P5]. With commission = 0 (the approved Standard USD account), this is exactly the PDF formula:
+
+V1 places no SL. The formula still needs an SL distance, so a **reference stop** follows the PDF's placement rule ("safely below the pin bar's wick and the 50 EMA") [PDF-INTERP]. It is used for sizing and shown in the email as **"Recommended stop — set manually"** [PDF-CORRECTION P7]. The PDF requires "Risk Managed" as an entry condition, and the lot size only equals the target risk if this stop is set. The system never places, monitors or modifies it [POLICY].
 
 ```
 REF_SL        = min(low of pattern candles, EMA50[i]) − slBufferPips · PIP       (floored to a point)
 SL_PIPS       = max((ENTRY − REF_SL) / PIP, minSlPips)
-LOTS_RAW      = (balance × riskPercent/100) / (SL_PIPS × pipValuePerLot)
+LOTS_RAW      = (balance × riskPercent/100) / (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip)
 LOTS          = clamp(floor_to_step(LOTS_RAW, lotStep), minLot, maxLot)
-ACTUAL_RISK_% = LOTS × SL_PIPS × pipValuePerLot / balance × 100
+ACTUAL_RISK_% = LOTS × (SL_PIPS × pipValuePerLot + commissionPerLotRoundTrip) / balance × 100
 ```
 
 | Parameter | Default | Tag |
@@ -276,13 +283,14 @@ ACTUAL_RISK_% = LOTS × SL_PIPS × pipValuePerLot / balance × 100
 | `riskPercent` | 1.0 | [PDF] (1–2%) |
 | `maxRiskPercent` | 2.0. Config above this is **rejected at load**; ACTUAL_RISK above it is rejected at V5. | [PDF] |
 | `pipValuePerLot` | 10 (USD per pip per 1.00 lot; EUR/USD, USD account, 100,000 units). **Read from config, never hard-coded.** | [ENG, D6] |
+| `commissionPerLotRoundTrip` | **0**, valid **only** for the approved Standard USD account (spread-only). A required config value with no implicit default: any other account must set its actual commission from the broker's current terms. No Exness commission figure is assumed anywhere. | [PDF-CORRECTION P5] |
 | `lotStep` / `minLot` / `maxLot` | 0.01 / 0.01 / config | [ENG] / [POLICY] safety cap |
 | `slBufferPips` | 15m: 2, 30m: 2, 1H: 3 | [ENG] |
 | `minSlPips` | 5 (prevents oversized lots) | [ENG] |
 
 - **Lots are always rounded down**, so risk never rounds up.
 - If `LOTS_RAW < minLot`, `LOTS = minLot`. That usually pushes ACTUAL_RISK above target; if it exceeds `maxRiskPercent`, the signal is rejected (V5).
-- **Caveat stated in the email:** the risk percentage only holds if the trader sets the reference stop.
+- **Caveat stated in the email:** the risk percentage only holds if the trader sets the recommended stop.
 - **PDF example:** $1,000 × 1% = $10, with an SL of 20 pips: $10 / (20 × $10) = **0.05 lots**. This is a test fixture.
 
 ---
@@ -321,7 +329,8 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
 - `rsiOversold` 30 vs 35
 - `rsiMode` both / recovery_only / above_mid_only
 - `touchTolPips` at 0.5×, 1× and 2×
-- `entryMode` close_offset vs candle_mid
+- `entryMode` close_offset vs candle_mid (both Buy Limit)
+- PDF market-entry baseline (`backtest.includePdfMarketBaseline`, Ask-filled): answers whether the Buy Limit helps or hurts the PDF strategy [PDF-CORRECTION P6]
 - `cooldownCandles` 0 / 3 / 6
 
 ---
@@ -383,3 +392,4 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
 | D4 | Cooldown | 3 candles per timeframe, configurable; it is a safeguard, not a claim of correctness. |
 | D5 | Support | 50 EMA only in V1. |
 | D6 | Account | USD standard, as a config assumption (`account.*`), not architecture. |
+| PDF review | Corrections (2026-09-25) | P4 market-baseline fill at Ask; P5 commission in sizing (0 for Standard USD only); P6 PDF market entry as a backtest-only baseline; P7 recommended stop shown in the email. See `docs/claude_thinking/pdf-review.md`. The original PDF is unchanged. |

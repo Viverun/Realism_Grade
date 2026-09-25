@@ -37,6 +37,8 @@ export const configSchema = z
         riskPercent: positive,
         maxRiskPercent: positive.max(PDF_MAX_RISK_PERCENT, `maxRiskPercent may not exceed ${PDF_MAX_RISK_PERCENT}%`),
         pipValuePerLot: positive,
+        /** Required, no default: 0 is only correct for spread-only accounts (spec §9, PDF review P5). */
+        commissionPerLotRoundTrip: nonNegative,
         lotStep: positive,
         minLot: positive,
         maxLot: positive,
@@ -113,7 +115,13 @@ export const configSchema = z
         assumedSpreadPips: nonNegative,
       })
       .strict(),
-    backtest: z.object({ placementDelaySec: nonNegative }).strict(),
+    backtest: z
+      .object({
+        placementDelaySec: nonNegative,
+        /** PDF market-at-next-open entry as a backtest-only baseline (PDF review P6). */
+        includePdfMarketBaseline: z.boolean(),
+      })
+      .strict(),
   })
   .strict();
 

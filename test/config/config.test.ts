@@ -19,6 +19,25 @@ describe('config/v1.yaml', () => {
     expect(config.strategy.timeframes.H1.touchTolPips).toBe(5);
   });
 
+  it('PDF review P5: commission is an explicit, required value (0 for the Standard USD account)', async () => {
+    const config = await loadConfig(CONFIG_PATH);
+    expect(config.account.type).toBe('standard');
+    expect(config.account.commissionPerLotRoundTrip).toBe(0);
+    const raw = await rawConfig();
+    delete raw.account.commissionPerLotRoundTrip;
+    expect(() => parseConfig(raw)).toThrow(/commissionPerLotRoundTrip/);
+    raw.account.commissionPerLotRoundTrip = -1;
+    expect(() => parseConfig(raw)).toThrow(ConfigError);
+  });
+
+  it('PDF review P6: the PDF market entry is a backtest-only baseline, never a production entry mode', async () => {
+    const config = await loadConfig(CONFIG_PATH);
+    expect(config.backtest.includePdfMarketBaseline).toBe(true);
+    const raw = await rawConfig();
+    raw.entry.mode = 'next_open_market';
+    expect(() => parseConfig(raw)).toThrow(/entry\.mode/);
+  });
+
   it('rejects risk above the PDF 2% maximum', async () => {
     const raw = await rawConfig();
     raw.account.riskPercent = 2.5;

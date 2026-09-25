@@ -29,10 +29,11 @@ Project context for Claude Code sessions in this repository.
 | `docs/v1/strategy-rules-v1.md` | **Mechanical rule spec.** APPROVED (D1–D6). The strategy code must match it exactly. |
 | `docs/foundation/EUR_USD Entry Strategy Guide.pdf` | Ahmad's original strategy. It is truncated at "Applying the Lot Size Formula:". |
 | `config/v1.yaml` | Every parameter, each tagged with its provenance |
+| `docs/claude_thinking/` | Claude's reviews and reasoning; advisory. `pdf-review.md` lists the PDF errors (P1–P8), `corrected-strategy.md` is the corrected rewrite. **The original PDF and context-V1.md are never edited.** |
 
 ## Hard rules for code
 
-- **Provenance:** every parameter is tagged [PDF], [PDF-INTERP], [ENG] or [POLICY], in the spec and in `config/v1.yaml`. Never present an [ENG]/[POLICY] value, or our interpretation, as coming from the PDF.
+- **Provenance:** every parameter is tagged [PDF], [PDF-INTERP], [ENG], [POLICY] or [PDF-CORRECTION] (a documented fix of a PDF error), in the spec and in `config/v1.yaml`. Never present an [ENG]/[POLICY] value, or our interpretation, as coming from the PDF.
   - Example: RSI oversold is **30 in the PDF**; 35 is our experimental V1 default, and the backtest runs both.
 - **No hard-coded strategy numbers.** Everything comes from `config/v1.yaml` (validated by `src/config/schema.ts`), including `pipValuePerLot`. A config with risk above 2% is rejected.
 - **No look-ahead (spec §1, §12):**
@@ -78,3 +79,6 @@ npm run typecheck   # tsc --noEmit
 - An RSI reference worksheet (StockCharts) rounds its intermediate averages. Our exact Wilder RSI gives 70.46 where the worksheet shows 70.53.
 - The EMA needs `warmupCandles = 1000` to be independent of its seed.
 - PDF lot-size fixture: $1,000 at 1% risk, entry 1.0860, SL 1.0840 (20 pips) → 0.05 lots.
+- **Commission (P5):** lots = risk$ / (SL pips × pipValuePerLot + commissionPerLotRoundTrip). The value 0 is valid **only** for the approved Standard USD account. Never assume an Exness commission figure.
+- **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
+- **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.

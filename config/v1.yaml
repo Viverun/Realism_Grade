@@ -6,6 +6,7 @@
 #   [PDF-INTERP] our explicit interpretation of an ambiguous/inconsistent PDF rule
 #   [ENG]        engineering parameter (tunable, compared in backtest)
 #   [POLICY]     V1 product / alert / execution policy (not strategy logic)
+#   [PDF-CORRECTION] documented fix of a PDF error/omission (docs/claude_thinking/pdf-review.md)
 
 version: 1
 
@@ -21,6 +22,8 @@ account:                 # [POLICY, D6] configuration assumption, not architectu
   riskPercent: 1.0       # [PDF] 1–2% per trade
   maxRiskPercent: 2.0    # [PDF] config above this is rejected; actual risk above it rejects the alert
   pipValuePerLot: 10     # [ENG, D6] USD per pip per 1.00 lot (EUR/USD, USD account, 100k units)
+  commissionPerLotRoundTrip: 0  # [PDF-CORRECTION P5] 0 ONLY because the approved account is Standard USD (spread-only).
+                                # Any other account: set its actual round-trip commission per 1.00 lot.
   lotStep: 0.01          # [ENG]
   minLot: 0.01           # [ENG]
   maxLot: 1.0            # [POLICY] hard safety cap
@@ -51,7 +54,7 @@ strategy:
     H1:  { touchTolPips: 5, minSwingPips: 15, minRangePips: 5, entryOffsetPips: 2.0, slBufferPips: 3, outcomeHorizons: [4, 8, 24] }
 
 entry:
-  mode: close_offset     # [ENG, D3] close_offset | candle_mid
+  mode: close_offset     # [ENG, D3] close_offset | candle_mid — both are Buy Limit prices (production is always Buy Limit)
   validCandles: 1        # [POLICY] advisory expiry shown in the email; not from the PDF
 
 sizing:
@@ -76,3 +79,5 @@ execution:               # all [POLICY] — spec §8
 
 backtest:
   placementDelaySec: 60  # [ENG] simulated trader reaction time
+  includePdfMarketBaseline: true  # [PDF-CORRECTION P6] also run the PDF's market-at-next-open entry (Ask-filled) as a
+                                  # backtest-only baseline; never used for production alerts
