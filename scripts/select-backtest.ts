@@ -7,6 +7,8 @@
  *                     design period (--end = holdout start).
  *   --mode holdout    one frozen configuration (--variant) over design + holdout, compared with V1
  *                     on the holdout, with the quality gate (§5).
+ *   --mode evaluate   one configuration (--variant) over the whole period: by year, by timeframe,
+ *                     and split at --holdout-start. Descriptive; not a fresh out-of-sample test.
  *
  *   tsx scripts/select-backtest.ts <files…> --end <ISO, exclusive> --mode frequency|grid|holdout
  *     [--variant NAME] [--holdout-start ISO] [--out report.md] [--config config/v1.yaml]
@@ -23,7 +25,7 @@ import { bootstrapMeanDiff, meanInterval, type Interval } from '../src/backtest/
 import { TickStore } from '../src/backtest/tick-store.js';
 import { buildVariants } from '../src/backtest/variants.js';
 
-type Mode = 'frequency' | 'grid' | 'holdout';
+type Mode = 'frequency' | 'grid' | 'holdout' | 'evaluate';
 
 function parseArgs(argv: string[]) {
   const args = { files: [] as string[], endIso: '', mode: 'frequency' as Mode, variant: null as string | null, holdoutStart: null as string | null, out: '', config: 'config/v1.yaml' };
@@ -44,7 +46,8 @@ function parseArgs(argv: string[]) {
     else args.files.push(arg);
   }
   if (!args.files.length || !args.endIso) throw new Error('Usage: select-backtest <files…> --end <ISO> --mode frequency|grid|holdout');
-  if (!['frequency', 'grid', 'holdout'].includes(args.mode)) throw new Error(`Unknown mode ${args.mode}`);
+  if (!['frequency', 'grid', 'holdout', 'evaluate'].includes(args.mode)) throw new Error(`Unknown mode ${args.mode}`);
+  if (args.mode === 'evaluate' && (!args.variant || !args.holdoutStart)) throw new Error('evaluate mode needs --variant and --holdout-start (the split date)');
   if (args.mode === 'holdout' && (!args.variant || !args.holdoutStart)) throw new Error('holdout mode needs --variant and --holdout-start');
   args.out ||= `docs/backtest/v1_1-${args.mode}.md`;
   args.files.sort();
@@ -83,7 +86,7 @@ async function main(): Promise<void> {
   const candles = store.buildCandles(endMs);
   process.stderr.write(`loaded ${load.ticks.toLocaleString('en-US')} ticks in ${((Date.now() - t0) / 1000).toFixed(0)}s\n`);
 
-  const variants = args.mode === 'holdout' ? [selectionVariant(base, args.variant!)] : selectionGrid(base);
+  const variants = args.mode === 'holdout' || args.mode === 'evaluate' ? [selectionVariant(base, args.variant!)] : selectionGrid(base);
   const stream = buildCandidateStream(candles, variants[0]!.config, TIMEFRAMES);
   const runs: SelectionRun[] = variants.map((v) => runSelection(v.name, stream, store, v.config, endMs));
   process.stderr.write(`ran ${runs.length} selection runs in ${((Date.now() - t0) / 1000).toFixed(0)}s\n`);
@@ -143,6 +146,38 @@ async function main(): Promise<void> {
     for (const tier of ['A', 'B', 'C', 'D'] as const) L.push(outcomeRow(`V1.1 holdout, tier ${tier}`, hold.byTier[tier]));
     L.push('', '**V1 baseline on the holdout (approved defaults, Buy Limit):**', '', '| Timeframe | Filled | Expectancy R / filled trade |', '|---|---|---|');
     for (const b of baseline) L.push(`| ${b.tf} | ${b.rValues.length} | ${ci(b.expectancy)} |`);
+    L.push('');
+  }
+
+  if (args.mode === 'evaluate') {
+    const split = Date.parse(args.holdoutStart!);
+    const run = runs[0]!;
+    const all = summariseSelection(run);
+    const first = summariseSelection(run, -Infinity, split);
+    const second = summariseSelection(run, split);
+    const splitLabel = args.holdoutStart!.slice(0, 10);
+    L.push(`# Evaluation — \`${run.name}\``, '');
+    L.push("> **Ahmad's full setup only (D10).** Only alerts meeting all four PDF rules (tier A); no slot-end fallback, so no tier B/C/D alerts. Timeframes M5/M15/M30/H1, one alert per slot, at most 3 per trading day. Buy Limit only (D7).", '');
+    L.push(`> **Not a fresh out-of-sample test.** The ${splitLabel} → end period was the V1.1 holdout, and tier-A results on it were already seen (docs/backtest/v1_1-findings.md). This run is descriptive: the full history, by year and by timeframe. A genuinely new test needs new data, e.g. paper trading forward.`, '');
+    L.push(dataLine, `Config hash \`${run.configHash}\`.`, '');
+    L.push('## Frequency', '', '| Period | Trading days | Alerts / day | Alerts / week | Slots with no full setup | Missed (Ask check) |', '|---|---|---|---|---|---|');
+    for (const [label, s] of [['All', all], [`< ${splitLabel}`, first], [`≥ ${splitLabel}`, second]] as const) {
+      L.push(`| ${label} | ${s.tradingDays} | ${s.alertsPerDay.toFixed(2)} | ${(s.alertsPerDay * 5).toFixed(2)} | ${s.noSetup} | ${s.missed} |`);
+    }
+    L.push('', '## Outcomes (Buy Limit)', '', ...OUTCOME_HEAD);
+    L.push(outcomeRow('All', all.overall), outcomeRow(`< ${splitLabel}`, first.overall), outcomeRow(`≥ ${splitLabel} (already seen)`, second.overall));
+    L.push('', '## By year', '', ...OUTCOME_HEAD);
+    const years = [...new Set(run.alerts.map((a) => a.selection.date.slice(0, 4)))].sort();
+    for (const y of years) {
+      const from = Date.parse(`${y}-01-01T00:00:00+04:00`);
+      const to = Date.parse(`${Number(y) + 1}-01-01T00:00:00+04:00`);
+      L.push(outcomeRow(y, summariseSelection(run, from, to).overall));
+    }
+    L.push('', '## By timeframe', '', ...OUTCOME_HEAD);
+    for (const tf of TIMEFRAMES) {
+      const sub = { ...run, alerts: run.alerts.filter((a) => a.selection.candidate?.decision.timeframe === tf) };
+      L.push(outcomeRow(tf, summariseSelection(sub).overall));
+    }
     L.push('');
   }
 

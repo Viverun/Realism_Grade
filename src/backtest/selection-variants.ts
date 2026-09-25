@@ -46,7 +46,15 @@ export function selectionGrid(base: AppConfig): SelectionVariant[] {
   return out;
 }
 
+/** D10: Ahmad's full setup only — all four rules, all timeframes, no fallback, ≤ 1 alert per slot (≤ 3/day). */
+export function fullSetupOnly(base: AppConfig): SelectionVariant {
+  const c = structuredClone(base);
+  c.selection = { ...c.selection, mode: 'daily_top3', slots: WINDOWS.w08_23!, immediateMinScore: 4, timeframes: ['M5', 'M15', 'M30', 'H1'], fallback: false };
+  return { name: 'full_setup_only', config: parseConfig(c) };
+}
+
 export function selectionVariant(base: AppConfig, name: string): SelectionVariant {
+  if (name === 'full_setup_only') return fullSetupOnly(base);
   const v = selectionGrid(base).find((x) => x.name === name);
   if (!v) throw new Error(`Unknown selection variant ${name}`);
   return v;

@@ -60,6 +60,14 @@ describe('DailySelector (V1.1, D9)', () => {
     expect(truncated[0]).toEqual(full[0]);
   });
 
+  it('full setup only (fallback off): only score-4 alerts; empty slots are "none", not misses', () => {
+    const sel = new DailySelector({ ...selection, fallback: false }, 'Asia/Dubai', () => true);
+    const events = stream(at('04:00'), at('19:00'), (t) => (t === at('06:00') ? 4 : 3));
+    const out = [...events.flatMap(([t, cs]) => sel.onClose(t, cs)), ...sel.finish(at('23:59'))];
+    expect(out.map((s) => s.kind)).toEqual(['immediate', 'none', 'none']);
+    expect(out[0]!.candidate!.scored.score).toBe(4);
+  });
+
   it('logs a miss when no candidate passes the send-time check', () => {
     const out = run(stream(at('04:00'), at('19:00'), () => 2), at('23:59'), () => false);
     expect(out.map((s) => s.kind)).toEqual(['missed', 'missed', 'missed']);

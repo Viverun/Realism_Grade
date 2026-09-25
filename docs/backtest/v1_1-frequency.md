@@ -4,20 +4,20 @@
 
 > **Frequency only.** This report deliberately contains **no outcome metrics**, so it does not spend any holdout data. Outcomes are evaluated only by the pre-declared design grid and the one-time holdout run.
 
-Data: `Exness_EURUSD_2024.zip`, `Exness_EURUSD_2025_01.zip`, `Exness_EURUSD_2025_02.zip`, `Exness_EURUSD_2025_03.zip`, `Exness_EURUSD_2025_04.zip`, `Exness_EURUSD_2025_05.zip`, `Exness_EURUSD_2025_06.zip`, `Exness_EURUSD_2025_07.zip`, `Exness_EURUSD_2025_08.zip`, `Exness_EURUSD_2025_09.zip`, `Exness_EURUSD_2025_10.zip`, `Exness_EURUSD_2025_11.zip`, `Exness_EURUSD_2025_12.zip`, `Exness_EURUSD_2026_01.zip`, `Exness_EURUSD_2026_02.zip`, `Exness_EURUSD_2026_03.zip`, `Exness_EURUSD_2026_04.zip`, `Exness_EURUSD_2026_05.zip`, `Exness_EURUSD_2026_06.zip`, `Exness_EURUSD_2026_07.zip`, `Exness_EURUSD_2026_08.zip`, `Exness_EURUSD_2026_09.zip`. 40,175,230 ticks, 2024-01-01 → 2026-09-24; cut-off (exclusive) 2026-09-25T00:00:00Z. 5 file(s) reordered by day blocks.
+Data: `Exness_EURUSD_2015.zip`, `Exness_EURUSD_2016_01.zip`, `Exness_EURUSD_2016_02.zip`, `Exness_EURUSD_2016_03.zip`, `Exness_EURUSD_2016_04.zip`, `Exness_EURUSD_2016_05.zip`, `Exness_EURUSD_2016_06.zip`, `Exness_EURUSD_2016_07.zip`, `Exness_EURUSD_2016_08.zip`, `Exness_EURUSD_2016_09.zip`, `Exness_EURUSD_2016_10.zip`, `Exness_EURUSD_2016_11.zip`, `Exness_EURUSD_2016_12.zip`, `Exness_EURUSD_2017.zip`, `Exness_EURUSD_2018_01.zip`, `Exness_EURUSD_2018_02.zip`, `Exness_EURUSD_2018_03.zip`, `Exness_EURUSD_2018_04.zip`, `Exness_EURUSD_2018_05.zip`, `Exness_EURUSD_2018_06.zip`, `Exness_EURUSD_2018_07.zip`, `Exness_EURUSD_2018_08.zip`, `Exness_EURUSD_2018_09.zip`, `Exness_EURUSD_2018_10.zip`, `Exness_EURUSD_2018_11.zip`, `Exness_EURUSD_2018_12.zip`, `Exness_EURUSD_2019.zip`, `Exness_EURUSD_2020.zip`, `Exness_EURUSD_2021.zip`, `Exness_EURUSD_2022_01.zip`, `Exness_EURUSD_2022_02.zip`, `Exness_EURUSD_2022_03.zip`, `Exness_EURUSD_2022_04.zip`, `Exness_EURUSD_2022_05.zip`, `Exness_EURUSD_2022_06.zip`, `Exness_EURUSD_2022_07.zip`, `Exness_EURUSD_2022_08.zip`, `Exness_EURUSD_2022_09.zip`, `Exness_EURUSD_2022_10.zip`, `Exness_EURUSD_2022_11.zip`, `Exness_EURUSD_2022_12.zip`, `Exness_EURUSD_2023.zip`, `Exness_EURUSD_2024.zip`, `Exness_EURUSD_2025_01.zip`, `Exness_EURUSD_2025_02.zip`, `Exness_EURUSD_2025_03.zip`, `Exness_EURUSD_2025_04.zip`, `Exness_EURUSD_2025_05.zip`, `Exness_EURUSD_2025_06.zip`, `Exness_EURUSD_2025_07.zip`, `Exness_EURUSD_2025_08.zip`, `Exness_EURUSD_2025_09.zip`, `Exness_EURUSD_2025_10.zip`, `Exness_EURUSD_2025_11.zip`, `Exness_EURUSD_2025_12.zip`, `Exness_EURUSD_2026_01.zip`, `Exness_EURUSD_2026_02.zip`, `Exness_EURUSD_2026_03.zip`, `Exness_EURUSD_2026_04.zip`, `Exness_EURUSD_2026_05.zip`, `Exness_EURUSD_2026_06.zip`, `Exness_EURUSD_2026_07.zip`, `Exness_EURUSD_2026_08.zip`, `Exness_EURUSD_2026_09.zip`. 169,304,390 ticks, 2015-08-10 → 2026-09-24; cut-off (exclusive) 2026-09-25T00:00:00Z. 5 file(s) reordered by day blocks.
 
 | Configuration | Trading days | Alerts / day | Missed slots | Immediate / fallback | Tier A / B / C / D | Counter-trend | Timeframes |
 |---|---|---|---|---|---|---|---|
-| w08_23-imm4-all4 | 702 | 3.00 | 1 | 669 / 1436 | 686 / 160 / 630 / 629 | 980 (47%) | M5 645, M15 355, M30 327, H1 778 |
-| w08_23-imm4-no5 | 695 | 3.00 | 0 | 318 / 1767 | 335 / 176 / 678 / 896 | 1187 (57%) | M15 511, M30 472, H1 1102 |
-| w08_23-imm3-all4 | 702 | 3.00 | 1 | 1725 / 380 | 169 / 1572 / 136 / 228 | 968 (46%) | M5 1032, M15 361, M30 291, H1 421 |
-| w08_23-imm3-no5 | 695 | 3.00 | 0 | 1205 / 880 | 128 / 1114 / 301 / 542 | 1115 (53%) | M15 803, M30 477, H1 805 |
-| w04_23-imm4-all4 | 706 | 2.98 | 11 | 750 / 1357 | 756 / 132 / 510 / 709 | 958 (45%) | M5 702, M15 495, M30 375, H1 535 |
-| w04_23-imm4-no5 | 699 | 2.98 | 11 | 380 / 1706 | 391 / 131 / 570 / 994 | 1194 (57%) | M15 747, M30 578, H1 761 |
-| w04_23-imm3-all4 | 706 | 2.98 | 11 | 1751 / 356 | 179 / 1580 / 96 / 252 | 936 (44%) | M5 1060, M15 425, M30 298, H1 324 |
-| w04_23-imm3-no5 | 699 | 2.98 | 11 | 1259 / 827 | 131 / 1147 / 236 / 572 | 1099 (53%) | M15 972, M30 534, H1 580 |
-| w00_24-imm4-all4 | 709 | 2.98 | 17 | 820 / 1290 | 830 / 111 / 444 / 725 | 934 (44%) | M5 700, M15 344, M30 313, H1 753 |
-| w00_24-imm4-no5 | 702 | 2.98 | 17 | 408 / 1681 | 421 / 118 / 566 / 984 | 1141 (55%) | M15 546, M30 475, H1 1068 |
-| w00_24-imm3-all4 | 710 | 2.97 | 17 | 1803 / 308 | 184 / 1628 / 72 / 227 | 932 (44%) | M5 1085, M15 368, M30 278, H1 380 |
-| w00_24-imm3-no5 | 703 | 2.97 | 17 | 1317 / 773 | 151 / 1185 / 219 / 535 | 1073 (51%) | M15 873, M30 470, H1 747 |
+| w08_23-imm4-all4 | 2865 | 3.00 | 5 | 2978 / 5612 | 3088 / 638 / 2269 / 2595 | 4005 (47%) | M5 2619, M15 1466, M30 1289, H1 3216 |
+| w08_23-imm4-no5 | 2857 | 3.00 | 4 | 1460 / 7107 | 1571 / 723 / 2675 / 3598 | 4901 (57%) | M15 2076, M30 1875, H1 4616 |
+| w08_23-imm3-all4 | 2865 | 3.00 | 4 | 7065 / 1526 | 811 / 6332 / 505 / 943 | 4054 (47%) | M5 4140, M15 1552, M30 1120, H1 1779 |
+| w08_23-imm3-no5 | 2857 | 3.00 | 3 | 5043 / 3525 | 601 / 4605 / 1167 / 2195 | 4702 (55%) | M15 3288, M30 1945, H1 3335 |
+| w04_23-imm4-all4 | 2873 | 2.99 | 25 | 3294 / 5300 | 3339 / 517 / 1985 / 2753 | 3871 (45%) | M5 2844, M15 1961, M30 1481, H1 2308 |
+| w04_23-imm4-no5 | 2865 | 2.99 | 23 | 1681 / 6891 | 1735 / 524 / 2459 / 3854 | 4861 (57%) | M15 2989, M30 2280, H1 3303 |
+| w04_23-imm3-all4 | 2873 | 2.99 | 24 | 7232 / 1363 | 820 / 6439 / 402 / 934 | 3945 (46%) | M5 4346, M15 1814, M30 1200, H1 1235 |
+| w04_23-imm3-no5 | 2865 | 2.99 | 22 | 5284 / 3289 | 617 / 4743 / 1033 / 2180 | 4601 (54%) | M15 4047, M30 2140, H1 2386 |
+| w00_24-imm4-all4 | 2880 | 2.98 | 67 | 3572 / 5001 | 3629 / 414 / 1816 / 2714 | 3692 (43%) | M5 2893, M15 1403, M30 1262, H1 3015 |
+| w00_24-imm4-no5 | 2872 | 2.97 | 97 | 1830 / 6689 | 1893 / 467 / 2410 / 3749 | 4651 (55%) | M15 2149, M30 1934, H1 4436 |
+| w00_24-imm3-all4 | 2881 | 2.98 | 43 | 7424 / 1174 | 792 / 6664 / 294 / 848 | 3919 (46%) | M5 4402, M15 1490, M30 1104, H1 1602 |
+| w00_24-imm3-no5 | 2873 | 2.98 | 57 | 5579 / 2981 | 632 / 5019 / 885 / 2024 | 4546 (53%) | M15 3545, M30 1943, H1 3072 |
 

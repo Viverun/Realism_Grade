@@ -21,7 +21,8 @@ export interface Candidate {
   tfRank: number;
 }
 
-export type SelectionKind = 'immediate' | 'fallback' | 'missed';
+/** 'none' = slot ended with no full setup while fallback is off (not a failure). */
+export type SelectionKind = 'immediate' | 'fallback' | 'missed' | 'none';
 
 export interface SlotSelection {
   date: string;
@@ -99,6 +100,10 @@ export class DailySelector {
     while (this.pending.length && (inclusive ? this.pending[0]!.endUtc <= t : this.pending[0]!.endUtc < t)) {
       const state = this.pending.shift()!;
       if (state.done) continue;
+      if (!this.selection.fallback) {
+        out.push(this.select(state, 'none', state.endUtc, null));
+        continue;
+      }
       const pool = [...this.latestByTf.values()]
         .filter((c) => c.decision.closeTime >= state.startUtc && c.decision.closeTime <= state.endUtc && !this.sent.has(c.decision.id))
         .sort(better);
