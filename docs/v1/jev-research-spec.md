@@ -66,6 +66,7 @@ Every question is independent and asked separately, so one answer can't anchor a
 
 - **Only Q1 is primary evidence;** Q2–Q5 are exploratory.
 - **API (from the owner-supplied TypeSafe docs):** `POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`, text-only `state` plus a list of typed questions (Choice / Score / Noul). Questions within one request are answered independently, so the whole battery is **one request per snapshot** (~800 requests/month at 40 samples/day).
+- **Model choice:** the test uses `jev-latest`. The API also lists `jev-preview` (same release date, described as "should be better in most ways"); it is **not** used, because a preview can change without notice, which would restart the clock.
 - **Pinned model:** `jev-latest` is a moving alias. The log records the model identifier the API reports; if it changes mid-test, the clock restarts (§5).
 - **Confidence:** every answer's reported `confidence` is logged but is **not** used for gating in phase A; it is evaluated as an exploratory calibration check.
 - **Settings:** as deterministic as the API allows.
@@ -79,7 +80,7 @@ Every question is independent and asked separately, so one answer can't anchor a
 - Configurable sampling is available if cost requires it.
 
 **Data:** only candles **after Jev's knowledge cutoff**.
-- **The primary window starts on 2026-09-28 00:00 UTC** (`src/jev/protocol.ts`): the first full trading week after approval, and after `jev-latest`'s release date (2026-09-15, as given in TypeSafe's published OpenAPI schema; to be confirmed by `npm run jev:probe` once the key and network are set up), so no candle in it can be in Jev's training data. `npm run jev:probe` re-checks the release date; if a newer model is released, the window must move after it (clock restart).
+- **The primary window starts on 2026-09-28 00:00 UTC** (`src/jev/protocol.ts`): the first full trading week after approval, and after `jev-latest`'s release date (**2026-09-10**, confirmed by `npm run jev:probe` against the live API on 2026-09-25), so no candle in it can be in Jev's training data. `npm run jev:probe` re-checks the release date; if a newer model is released, the window must move after it (clock restart).
 - **Earlier candles are excluded:** any candle from before that date may be in Jev's training data and **can never count as evidence**. That rules out every backtest on 2015–2026.
 - **Scoring can be done later in batches** from monthly Exness tick downloads. Candles after the cutoff are unknown to Jev whenever they're scored. No live feed is needed for the research phase.
 

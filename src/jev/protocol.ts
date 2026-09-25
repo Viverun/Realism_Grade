@@ -6,7 +6,7 @@ import type { Timeframe } from '../core/timeframe.js';
 
 export const PROTOCOL = {
   /** Owner approved D11 on 2026-09-25. First full trading week after approval, and after
-   *  jev-latest's release date (2026-09-15): no candle in the window can be in Jev's training data. */
+   *  jev-latest's release date (2026-09-10, confirmed by `jev:probe` on 2026-09-25): no candle in the window can be in Jev's training data. */
   primaryWindowStart: '2026-09-28T00:00:00Z',
   /** Every in-window candle with a valid V1 trade plan (tiers A–D) on these timeframes… */
   allTierTimeframes: ['M30', 'H1'] as readonly Timeframe[],
