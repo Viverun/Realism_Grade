@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TickStore } from '../../src/backtest/tick-store.js';
+import { DataOrderError, TickStore } from '../../src/backtest/tick-store.js';
 import { runTimeframe } from '../../src/backtest/runner.js';
 import { summarise } from '../../src/backtest/summary.js';
 import { buildVariants } from '../../src/backtest/variants.js';
@@ -35,6 +35,47 @@ describe('TickStore', () => {
     const candles = store.buildCandles(start + ((1 << 20) + 10) * 100);
     expect(candles.M15.length).toBeGreaterThan(100);
     expect(candles.H1.every((c) => c.ask !== undefined)).toBe(true);
+  });
+});
+
+describe('TickStore.normaliseOrder (whole-day blocks written out of order)', () => {
+  const day = (d: string, hh: number, mm = 0): number => Date.parse(`2025-08-${d}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`);
+  const fill = (times: number[]): TickStore => {
+    const st = new TickStore();
+    times.forEach((t, k) => st.push({ time: t, bid: 100_000 + k, ask: 100_008 + k }));
+    return st;
+  };
+
+  it('reorders day blocks into chronological order, stably', () => {
+    // Blocks: [20, 22] [21, 25] [24] — like the real 2025-08 export.
+    const st = fill([day('20', 1), day('20', 5), day('22', 3), day('21', 2), day('21', 2), day('25', 9), day('24', 22)]);
+    const report = st.normaliseOrder('f');
+    expect(report).toEqual({ file: 'f', ticks: 7, runs: 3, reordered: true });
+    const times = Array.from({ length: st.length }, (_, k) => st.timeAt(k));
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    // The two ticks at the same timestamp keep their original relative order (bid 100_003 then 100_004).
+    expect([st.bid(2), st.bid(3)]).toEqual([100_003, 100_004]);
+  });
+
+  it('leaves ordered data untouched', () => {
+    const st = fill([day('20', 1), day('21', 1)]);
+    expect(st.normaliseOrder('f')).toEqual({ file: 'f', ticks: 2, runs: 1, reordered: false });
+  });
+
+  it('refuses when a UTC day is split across blocks (ambiguous)', () => {
+    const st = fill([day('20', 1), day('20', 9), day('20', 5)]);
+    expect(() => st.normaliseOrder('f')).toThrow(DataOrderError);
+  });
+
+  it('TickStore.load reorders per file and reports it', async () => {
+    const dir = await tempDir();
+    const iso = (t: number): number => t;
+    await writeFile(join(dir, 'a.csv'), [HEADER, line(iso(day('21', 10)), 113_600, 113_607), line(iso(day('20', 10)), 113_500, 113_507)].join('\n'));
+    const { store, summary } = await TickStore.load([join(dir, 'a.csv')], 5, { endMs: day('30', 0) });
+    expect(store.length).toBe(2);
+    expect(store.timeAt(0)).toBe(day('20', 10));
+    expect(summary.reordered).toEqual([{ file: join(dir, 'a.csv'), ticks: 2, runs: 2, reordered: true }]);
+    expect(summary.dropped.outOfOrder).toBe(0);
   });
 });
 

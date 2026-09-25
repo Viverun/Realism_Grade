@@ -5,8 +5,22 @@ import { resampleCandles } from '../data/resample.js';
 import { TickAggregator } from '../data/tick-aggregator.js';
 import { assertValidCandles } from '../data/validate.js';
 
+const DAY_MS = 86_400_000;
+
+export class DataOrderError extends Error {}
+
+export interface FileOrderReport {
+  file: string;
+  ticks: number;
+  /** Maximal chronological runs in the file as written (1 = already in order). */
+  runs: number;
+  reordered: boolean;
+}
+
 export interface TickLoadSummary {
   files: string[];
+  /** Files whose whole-UTC-day blocks were written out of order and were reordered. */
+  reordered: FileOrderReport[];
   ticks: number;
   firstTime: number | null;
   lastTime: number | null;
@@ -63,11 +77,80 @@ export class TickStore {
     return lo;
   }
 
+  /** Rewrites the store in the order given by `permutation` (indices into the current arrays). */
+  private permute(permutation: Uint32Array): void {
+    const n = this.length;
+    const time = new Float64Array(Math.max(n, 1));
+    const bid = new Int32Array(Math.max(n, 1));
+    const ask = new Int32Array(Math.max(n, 1));
+    for (let k = 0; k < n; k++) {
+      const j = permutation[k]!;
+      time[k] = this.time[j]!;
+      bid[k] = this.bidArr[j]!;
+      ask[k] = this.askArr[j]!;
+    }
+    this.time = time;
+    this.bidArr = bid;
+    this.askArr = ask;
+  }
+
+  /**
+   * Restores chronological order for a file made of whole-UTC-day blocks written out of
+   * order (seen in some Exness exports). Safe only if every UTC day lies in exactly one
+   * chronological run; otherwise the data is ambiguous and a DataOrderError is thrown.
+   * The sort is stable, so ticks sharing a timestamp keep their original order.
+   */
+  normaliseOrder(file: string): FileOrderReport {
+    const n = this.length;
+    let runs = n > 0 ? 1 : 0;
+    const dayRun = new Map<number, number>();
+    for (let k = 0; k < n; k++) {
+      if (k > 0 && this.time[k]! < this.time[k - 1]!) runs += 1;
+      const day = Math.floor(this.time[k]! / DAY_MS);
+      const seen = dayRun.get(day);
+      if (seen === undefined) dayRun.set(day, runs);
+      else if (seen !== runs) {
+        throw new DataOrderError(
+          `${file}: UTC day ${new Date(day * DAY_MS).toISOString().slice(0, 10)} is split across out-of-order blocks; refusing to reorder`,
+        );
+      }
+    }
+    if (runs <= 1) return { file, ticks: n, runs, reordered: false };
+    const index = new Uint32Array(n);
+    for (let k = 0; k < n; k++) index[k] = k;
+    const time = this.time;
+    index.sort((a, b) => time[a]! - time[b]! || a - b);
+    this.permute(index);
+    return { file, ticks: n, runs, reordered: true };
+  }
+
+  /** Appends ticks from another store, keeping [startMs, endMs) and dropping anything older than the last kept tick. */
+  appendFrom(
+    other: TickStore,
+    range: { startMs?: number; endMs: number },
+    dropped: { beforeStart: number; atOrAfterEnd: number; outOfOrder: number },
+  ): void {
+    let last = this.length ? this.time[this.length - 1]! : -Infinity;
+    for (let k = 0; k < other.length; k++) {
+      const t = other.timeAt(k);
+      if (range.startMs !== undefined && t < range.startMs) dropped.beforeStart += 1;
+      else if (t >= range.endMs) dropped.atOrAfterEnd += 1;
+      else if (t < last) dropped.outOfOrder += 1;
+      else {
+        this.push({ time: t, bid: other.bid(k), ask: other.ask(k) });
+        last = t;
+      }
+    }
+  }
+
   *ticks(): Generator<Tick> {
     for (let k = 0; k < this.length; k++) yield { time: this.time[k]!, bid: this.bidArr[k]!, ask: this.askArr[k]! };
   }
 
-  /** Loads files in the given order, keeping ticks in [startMs, endMs) and dropping overlaps. */
+  /**
+   * Loads files in the given order. Each file is first put in chronological order
+   * (normaliseOrder); ticks outside [startMs, endMs) and ticks overlapping an earlier file are dropped.
+   */
   static async load(
     files: readonly string[],
     digits: number,
@@ -75,20 +158,17 @@ export class TickStore {
   ): Promise<{ store: TickStore; summary: TickLoadSummary }> {
     const store = new TickStore();
     const dropped = { beforeStart: 0, atOrAfterEnd: 0, outOfOrder: 0 };
-    let last = -Infinity;
+    const reordered: FileOrderReport[] = [];
     for (const file of files) {
-      for await (const tick of readExnessTickFile(file, digits)) {
-        if (range.startMs !== undefined && tick.time < range.startMs) dropped.beforeStart += 1;
-        else if (tick.time >= range.endMs) dropped.atOrAfterEnd += 1;
-        else if (tick.time < last) dropped.outOfOrder += 1;
-        else {
-          store.push(tick);
-          last = tick.time;
-        }
-      }
+      const buffer = new TickStore();
+      for await (const tick of readExnessTickFile(file, digits)) buffer.push(tick);
+      const order = buffer.normaliseOrder(file);
+      if (order.reordered) reordered.push(order);
+      store.appendFrom(buffer, range, dropped);
     }
     const summary: TickLoadSummary = {
       files: [...files],
+      reordered,
       ticks: store.length,
       firstTime: store.length ? store.timeAt(0) : null,
       lastTime: store.length ? store.timeAt(store.length - 1) : null,

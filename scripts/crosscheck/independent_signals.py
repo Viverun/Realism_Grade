@@ -51,7 +51,9 @@ def load_m15(files, end_ms):
                             if bid > c[1]: c[1] = bid
                             if bid < c[2]: c[2] = bid
                             c[3] = bid
-    return [(b, *candles[b]) for b in order]
+    # Sort by bucket time: some exports write whole days out of order; a 15-minute bucket never
+    # spans two days, so each bucket's OHLC is already correct in file order.
+    return [(b, *candles[b]) for b in sorted(candles)]
 
 def resample(m15, minutes):
     out, cur = [], None

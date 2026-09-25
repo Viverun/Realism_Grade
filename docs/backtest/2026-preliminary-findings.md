@@ -5,6 +5,8 @@
 > - **Sample sizes are small:** 24, 15 and 5 filled trades on M15, M30 and H1 respectively.
 > - **Nothing here justifies changing the strategy or choosing a timeframe yet.** These are observations to re-test on more data.
 
+> **Superseded for decisions** by the 33-month run: [`2024-2026-findings.md`](2024-2026-findings.md). Kept as the record of the first pipeline validation.
+
 Generated report: [`2026-preliminary.md`](2026-preliminary.md). Dataset definition: [`../v1/backtest-dataset-2026.md`](../v1/backtest-dataset-2026.md). Analysis by Claude, 2026-09-25.
 
 ## 1. What this phase set out to validate, and the result

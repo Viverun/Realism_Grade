@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ExnessTickParser } from '../../src/data/exness-ticks.js';
-import { TickStatsCollector, timestampShape } from '../../src/data/tick-stats.js';
+import { scanContinuity, TickStatsCollector, timestampShape } from '../../src/data/tick-stats.js';
 
 function run(lines: string[], inWindow: (ms: number) => boolean = () => true) {
   const parser = new ExnessTickParser(5);
-  const collector = new TickStatsCollector({ pointsPerPip: 10, digits: 5, inWindow, gapThresholdMs: 5 * 60_000, jumpThresholdPips: 20 });
+  const collector = new TickStatsCollector({ pointsPerPip: 10, digits: 5, inWindow });
   for (const line of lines) {
     try {
       const row = parser.parseRow(line);
@@ -49,19 +49,6 @@ describe('TickStatsCollector', () => {
     expect(stats.outOfOrder).toBe(1);
   });
 
-  it('separates weekend gaps from weekday gaps and flags jumps', () => {
-    const stats = run([
-      HEADER,
-      row('2026-09-18 20:59:00.000Z', '1.13600', '1.13606'), // Friday
-      row('2026-09-20 21:05:00.000Z', '1.13900', '1.13906'), // Sunday reopen, 30-pip gap
-      row('2026-09-21 12:00:00.000Z', '1.13910', '1.13916'), // Monday, 15 h later: weekday gap
-    ]);
-    expect(stats.gaps.weekend).toBe(1);
-    expect(stats.gaps.intraweek).toBe(1);
-    expect(stats.jumps.count).toBe(1);
-    expect(stats.jumps.examples[0]!.pips).toBe(30);
-  });
-
   it('counts parse errors without stopping', () => {
     const stats = run([HEADER, row('not a time', '1.1', '1.2'), row('2026-09-21 10:00:00Z', '1.13600', '1.13606')]);
     expect(stats.parseErrors.count).toBe(1);
@@ -89,5 +76,37 @@ describe('TickStatsCollector', () => {
 
   it('describes timestamp shapes', () => {
     expect(timestampShape('2026-09-21 10:00:01.120Z')).toBe('9999-99-99 99:99:99.999Z');
+  });
+});
+
+describe('scanContinuity (on ordered ticks)', () => {
+  const times = [
+    '2026-09-18T20:59:00Z', // Friday
+    '2026-09-20T21:05:00Z', // Sunday reopen: weekend close, 30-pip jump
+    '2026-09-21T10:00:00Z', // Monday: 15 h weekday gap, inside the window
+    '2026-09-21T21:00:00Z', // Monday rollover gap (outside the window)
+    '2026-09-23T09:00:00Z', // Tuesday 22 Sep missing entirely
+  ].map((t) => Date.parse(t));
+  const bids = [113_600, 113_900, 113_910, 113_905, 113_900];
+  const c = scanContinuity(times.length, (k) => times[k]!, (k) => bids[k]!, {
+    pointsPerPip: 10,
+    gapThresholdMs: 5 * 60_000,
+    jumpThresholdPips: 20,
+    inWindow: (ms) => {
+      const h = new Date(ms).getUTCHours();
+      return h >= 4 && h < 19;
+    },
+  });
+
+  it('separates weekend closes from weekday gaps and marks in-window gaps', () => {
+    expect(c.weekendGaps).toBe(1);
+    expect(c.weekdayGaps).toHaveLength(3);
+    expect(c.weekdayGaps.map((g) => g.inWindow)).toEqual([true, true, true]);
+  });
+
+  it('lists weekdays with no ticks and flags jumps', () => {
+    expect(c.missingWeekdays).toEqual(['2026-09-22']);
+    expect(c.jumpCount).toBe(1);
+    expect(c.jumps[0]!.pips).toBe(30);
   });
 });

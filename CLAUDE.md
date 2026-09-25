@@ -85,7 +85,9 @@ npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.
 - **Tick data lives in `docs/data/`** as zips (GitHub's limit is 100 MB per file):
   - monthly `Exness_EURUSD_2026_01..09.zip` is the backtest dataset;
   - `_09_24.zip` is for one-day loader validation only;
-  - the yearly `Exness_EURUSD_2026.zip` overlaps the monthly files and is not used.
+  - the yearly `Exness_EURUSD_2026.zip` overlaps the monthly files and is not used;
+  - `Exness_EURUSD_2024.zip` is yearly; `2025_01..12` are monthly (split locally from a 115 MB yearly zip).
+- **The 2025 export has whole UTC days written out of order** (Aug–Dec). `TickStore.normaliseOrder` repairs this only when each day lies in a single block, and refuses otherwise. 4 weekdays are missing from the export (2025-11-27, 12-05, 12-24, 12-26).
 - Backtest JSON dumps go to `data/backtest/` (gitignored).
 - `scripts/crosscheck/independent_signals.py` is an independent Python re-implementation of the rules. Rerun it after any rule change: its signal list must equal the engine's.
 
@@ -101,7 +103,13 @@ npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
 - **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).
-- **First 2026 findings** (`docs/backtest/2026-preliminary-findings.md`): signals are rare (H1 ≈ 0.05/day); the RSI above-50 branch produces ~95% of signals; the M15 Buy Limit may suffer adverse selection. All of this is small-sample and inconclusive.
+- **Main findings, 2024-01 → 2026-09-24** (`docs/backtest/2024-2026-findings.md`): no timeframe shows positive Buy Limit expectancy.
+  - M15: −0.25R [−0.47, −0.04], negative every year.
+  - M30: −0.08R, about 1 alert/week.
+  - H1: −0.12R, about 0.56 alerts/week.
+  - RSI is effectively "> 50 and rising".
+  - The live timeframe is still the owner's decision (D8).
+  - Never tune rules on this data without a holdout.
 - **Backtest results on the 2026 dataset are preliminary.** It is a partial year (Jan → 2026-09-24) with warm-up taken from early 2026, so H1 evaluation starts around March. Never present them as conclusive.
 - **Layer separation:** decision → alert → execution → outcome. Only the first is strategy; `src/strategy` must never import `src/backtest` or `src/alerts` (enforced by a test).
 - **Tick data:** validate new files with `npm run validate:ticks -- <files.zip|csv>`, which writes a report to `docs/claude_thinking/tick-data-validation.md`. `.zip` inputs need the system `unzip`.

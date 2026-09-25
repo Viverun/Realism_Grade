@@ -1,5 +1,7 @@
 # Initial backtest dataset: EUR/USD 2026 (partial year)
 
+> **Update, 2026-09-25:** 2024 and 2025 data are now available. The main dataset is **2024-01 → 2026-09-24** (`npm run backtest:all`); see [`../backtest/2024-2026-findings.md`](../backtest/2024-2026-findings.md). This page documents the initial 2026-only run.
+
 **Decided by the owner, 2026-09-25.** 2025 data is not required for this phase; development does not wait for it.
 
 ## Purpose of this phase
