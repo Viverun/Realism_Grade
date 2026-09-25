@@ -1,0 +1,78 @@
+# EUR/USD BUY Entry Alert — V1 configuration.
+# Spec: docs/v1/strategy-rules-v1.md. Every strategy number lives here; code has none.
+#
+# Provenance tags:
+#   [PDF]        stated in Ahmad's PDF
+#   [PDF-INTERP] our explicit interpretation of an ambiguous/inconsistent PDF rule
+#   [ENG]        engineering parameter (tunable, compared in backtest)
+#   [POLICY]     V1 product / alert / execution policy (not strategy logic)
+
+version: 1
+
+instrument:
+  symbol: EURUSD
+  digits: 5              # [ENG] 5-digit quotes; 1 point = 0.00001
+  pointsPerPip: 10       # [ENG] 1 pip = 0.0001
+
+account:                 # [POLICY, D6] configuration assumption, not architecture
+  currency: USD
+  type: standard
+  balance: 1000          # [POLICY] updated manually by the trader (no Exness API)
+  riskPercent: 1.0       # [PDF] 1–2% per trade
+  maxRiskPercent: 2.0    # [PDF] config above this is rejected; actual risk above it rejects the alert
+  pipValuePerLot: 10     # [ENG, D6] USD per pip per 1.00 lot (EUR/USD, USD account, 100k units)
+  lotStep: 0.01          # [ENG]
+  minLot: 0.01           # [ENG]
+  maxLot: 1.0            # [POLICY] hard safety cap
+
+indicators:
+  emaFast: 50            # [PDF]
+  emaSlow: 200           # [PDF]
+  rsiPeriod: 14          # [PDF]
+  warmupCandles: 1000    # [ENG] EMA200 convergence
+
+strategy:
+  pullbackLookback: 3    # [ENG] touch window i-2..i
+  swingLookback: 20      # [ENG] prior-move window, strictly before first touch
+  rsi:
+    oversold: 35         # [PDF-INTERP, D1] experimental; PDF baseline is 30 — backtest both
+    mid: 50              # [PDF]
+    lookback: 5          # [ENG]
+    mode: both           # [ENG] both | recovery_only | above_mid_only
+    requireRising: true  # [PDF-INTERP] "recovering"
+  pin:
+    wickBodyRatio: 2.0   # [ENG]
+    wickRangeRatio: 0.6  # [ENG]
+    maxUpperRatio: 0.2   # [ENG]
+    requireBullishBody: false  # [PDF-INTERP] hammer may be either colour
+  timeframes:            # all [ENG]
+    M15: { touchTolPips: 2, minSwingPips: 8,  minRangePips: 3, entryOffsetPips: 1.0, slBufferPips: 2, outcomeHorizons: [4, 16, 96] }
+    M30: { touchTolPips: 3, minSwingPips: 10, minRangePips: 4, entryOffsetPips: 1.5, slBufferPips: 2, outcomeHorizons: [4, 8, 48] }
+    H1:  { touchTolPips: 5, minSwingPips: 15, minRangePips: 5, entryOffsetPips: 2.0, slBufferPips: 3, outcomeHorizons: [4, 8, 24] }
+
+entry:
+  mode: close_offset     # [ENG, D3] close_offset | candle_mid
+  validCandles: 1        # [POLICY] advisory expiry shown in the email; not from the PDF
+
+sizing:
+  minSlPips: 5           # [ENG] prevents oversized lots
+
+alerts:                  # all [POLICY]
+  timezone: Asia/Dubai
+  windowStart: "08:00"
+  windowEnd: "23:00"
+  maxPerDay: 3
+  overCapRule: chronological
+  cooldownCandles: 3     # [POLICY, D4]
+  liveTimeframe: H1      # chosen after backtest
+
+execution:               # all [POLICY] — spec §8
+  quoteMode: strict      # strict | candle_close_fallback
+  maxQuoteAgeSec: 10
+  maxSignalLatencySec: 120
+  minLimitDistancePips: 0
+  candleSettleSec: 5
+  assumedSpreadPips: 1.0 # only used when no Ask data exists
+
+backtest:
+  placementDelaySec: 60  # [ENG] simulated trader reaction time
