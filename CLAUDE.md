@@ -35,6 +35,7 @@ Project context for Claude Code sessions in this repository.
 | `docs/foundation/EUR_USD Entry Strategy Guide.pdf` | Ahmad's original strategy. It is truncated at "Applying the Lot Size Formula:". |
 | `config/v1.yaml` | Every parameter, each tagged with its provenance |
 | `docs/v1/backtest-dataset-2026.md` | The initial backtest dataset: 2026 only, through 2026-09-24, partial year, **preliminary results only**. 2026-09-25 is the loader-validation file only. |
+| `docs/v1/v1-baseline.md` | **V1-baseline, frozen 2026-09-25**: config hash `72353efc…`. The fixed benchmark for the ablation and Jev; never modified. |
 | `docs/v1/jev-research-spec.md` | **D11, approved 2026-09-25**: Jev's exact role ("Jev judges, code executes"; shadow only) and the pre-registered forward validation test. Historical backtests of Jev are invalid, because 2015–2026 may be in its training data. |
 | `docs/claude_thinking/` | Claude's reviews and reasoning; advisory. `pdf-review.md` lists the PDF errors (P1–P8), `corrected-strategy.md` is the corrected rewrite. **The original PDF and context-V1.md are never edited.** |
 
@@ -90,6 +91,7 @@ npm run validate:2015-2023 # tick validation for 2015–2023
 npm run select:frequency   # V1.1 frequency only (no outcomes), 2015 → 2026-09-24
 npm run select:grid        # V1.1 design grid, 2015–2021 only
 npm run select:holdout -- --variant <name>   # V1.1 one-time holdout from 2022-01-01
+npm run ablation:full      # V1 diagnostic ablation (read-only) → docs/backtest/v1-ablation.md
 npm run email:demo         # send ONE synthetic test email via EMAIL_PROVIDER (default console)
 npm run jev:probe          # check JEV_API_KEY + network (GET /v1/models)
 npm run jev:fit-baseline   # frozen logistic baseline on 2015–2021 → config/jev-baseline-v1.json
