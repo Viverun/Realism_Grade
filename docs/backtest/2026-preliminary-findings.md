@@ -37,24 +37,25 @@ The four-way confluence is strict. The candle rule is the narrowest filter: only
 
 So D1's 30-vs-35 question is practically irrelevant on this data. In practice the RSI rule acts as "RSI > 50 and rising".
 
-### 2.3 The Buy Limit appears to fill mostly on setups that keep falling (PDF review P6)
-Same signals, different entry. The "+2R first" share among resolved filled trades, with 95% Wilson intervals:
+### 2.3 Buy Limit results (primary evidence) and the market-entry diagnostic
 
-| | Buy Limit (V1 production) | PDF market entry (baseline) |
-|---|---|---|
-| M15 | 3/24 = 12% (4–31%) | 14/51 = 27% (17–41%) |
-| M30 | 5/15 = 33% (15–58%) | 7/22 = 32% (16–53%) |
-| H1 | 2/4 = 50% (15–85%) | 1/4 = 25% (5–70%) |
+Per the owner's decision (D7), the **Buy Limit results are the primary evidence**; the PDF market entry is a secondary diagnostic only.
 
-- **On M15:**
-  - Only 46% of emailed limits fill.
-  - The median return 4 candles after the fill is **−4.7 pips**.
-  - The filled subset does worse than entering at market.
+**Buy Limit, default, with 95% intervals:**
 
-  This matches the adverse-selection concern in P6: the limit fills when price keeps falling and misses when price moves straight up. The intervals overlap, so it is **not established**, but it is the most important thing to re-test.
-- **On M30 there is no visible difference.**
+| | M15 | M30 | H1 |
+|---|---|---|---|
+| Emailed alerts / week | 1.44 | 0.68 | 0.27 |
+| Filled trades / week | 0.67 | 0.44 | 0.17 |
+| Fill rate | 46% | 65% | 63% |
+| +2R share of resolved | 13% [4%, 31%] (n=24) | 33% [15%, 58%] (n=15) | 50% [15%, 85%] (n=4) |
+| Expectancy, R per filled trade | **−0.63 [−1.04, −0.22]** | 0.00 [−0.75, 0.74] | 0.51 [−0.81, 1.82] |
+
+- **M15 is the only cell whose interval excludes zero:** it is negative on 2026. With 3 timeframes and 9 variants examined, one such cell can appear by chance, so this needs **confirming on 2024–2025**.
+- **M30 is indistinguishable from break-even.**
 - **H1 has too few trades** to say anything.
-- For reference: with a 1:2 target and stop, **33%** "+2R first" is break-even before costs. Spread is already included, because fills are at the Ask and exits at the Bid.
+
+**Diagnostic only (not decision evidence).** On the same M15 signals, the PDF market entry reached +2R first in 14/51 = 27% [17%, 41%] of trades. This suggests the M15 limit may fill disproportionately on setups that keep falling, and miss the ones that move straight up. On M30 there was no difference (32% vs 33%). This helps explain the M15 Buy Limit figures; it does not suggest switching production to market entry, which is out of V1 scope.
 
 ### 2.4 Stop slippage was negligible in this sample
 - **Realized R on stops:** median −1.00, mean −1.00 to −1.01.
@@ -71,8 +72,8 @@ With these sample sizes, every one of these differences is within noise. **None 
 
 ## 3. Suggested next steps (for the owner to decide)
 1. **Get more data before judging performance.** 2025 (and earlier) Exness ticks would give an out-of-sample check and 2–3× the trades. The code needs no changes; add the zips and run `npm run backtest -- … --end …`.
-2. **Treat the Buy Limit vs market entry question (§2.3) as the top research item.** It is a product decision from context-V1, so the owner decides. The backtest already measures both.
-3. **Decide whether H1's frequency (~1 alert every 3–4 weeks) is acceptable** for the product, or whether M15/M30 should be the live timeframe. That is a product question, not something this data can answer statistically.
+2. **Re-test the M15 Buy Limit result (§2.3) on 2024–2025.** Buy Limit is the primary evidence (D7); the market-entry comparison stays a diagnostic.
+3. **Live timeframe: not locked (D8).** H1's ~1 alert every 3–4 weeks is too sparse to decide on alone. Compare 15m/30m/1H Buy Limit frequency and outcomes on 2024–2026.
 4. **The RSI "recovery" branch is almost inert (§2.2).** Whether to keep it as written (faithful to the PDF) is the owner's call. Changing it would move away from Ahmad's rules.
 5. **Push the 2026-09-25 CSV** (zipped) if a validation report for that exact day is still wanted. The 09-24 file already validates the loader.
 

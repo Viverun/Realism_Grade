@@ -13,7 +13,7 @@ import { formatPoints } from '../src/core/price.js';
 import { TIMEFRAMES } from '../src/core/timeframe.js';
 import { makeLocalClock } from '../src/core/timezone.js';
 import { runTimeframe, type TimeframeRun } from '../src/backtest/runner.js';
-import { summarise, type Distribution, type RunSummary } from '../src/backtest/summary.js';
+import { summarise, type Distribution, type Interval, type RunSummary } from '../src/backtest/summary.js';
 import { TickStore } from '../src/backtest/tick-store.js';
 import { buildVariants } from '../src/backtest/variants.js';
 
@@ -51,7 +51,8 @@ function parseArgs(argv: string[]): Args {
 }
 
 const iso = (ms: number | null): string => (ms === null ? '—' : new Date(ms).toISOString().replace(':00.000Z', 'Z'));
-const n = (v: number | null | undefined, digits = 1): string => (v === null || v === undefined ? '—' : v.toFixed(digits));
+const fixed = (v: number, digits: number): string => (Math.abs(v) < 0.5 * 10 ** -digits ? 0 : v).toFixed(digits);
+const n = (v: number | null | undefined, digits = 1): string => (v === null || v === undefined ? '—' : fixed(v, digits));
 const pct = (v: number | null): string => (v === null ? '—' : `${(100 * v).toFixed(1)}%`);
 const dist = (d: Distribution, digits = 1): string => (d.n ? `${n(d.median, digits)} / ${n(d.mean, digits)} (n=${d.n})` : '—');
 
@@ -83,97 +84,154 @@ async function main(): Promise<void> {
   process.stderr.write(`ran ${runs.length} variant×timeframe runs in ${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
 
   const local = makeLocalClock(config.alerts.timezone);
-  const byVariant = (name: string): RunSummary[] => summaries.filter((s) => s.variant === name);
+  const primary = variants.filter((v) => v.entryModel === 'buy_limit');
+  const get = (variant: string, tf: string): RunSummary => summaries.find((x) => x.variant === variant && x.timeframe === tf)!;
+  const def = TIMEFRAMES.map((tf) => get('default', tf));
+  const spanDays = load.firstTime !== null && load.lastTime !== null ? (load.lastTime - load.firstTime) / 86_400_000 : 0;
+  const ci = (i: Interval, digits = 2, percent = false): string => {
+    if (i.value === null) return '—';
+    const f = (v: number): string => (percent ? `${fixed(100 * v, 0)}%` : fixed(v, digits));
+    return i.low === null || i.high === null ? `${f(i.value)} (n=${i.n})` : `${f(i.value)} [${f(i.low)}, ${f(i.high)}] (n=${i.n})`;
+  };
+
   const L: string[] = [];
   L.push(`# ${args.title}`, '');
-  L.push('> **PRELIMINARY — NOT CONCLUSIVE PERFORMANCE EVIDENCE.** This run validates the data pipeline, the strategy implementation, no-look-ahead behaviour and signal generation, and gives first indications only. The dataset covers **part of one calendar year** (see Dataset), includes the indicator warm-up, and is a single market regime. It is not a full 12-month test.', '');
+  L.push(
+    spanDays < 365
+      ? '> **PRELIMINARY — NOT CONCLUSIVE PERFORMANCE EVIDENCE.** The dataset covers **part of one calendar year** only. It validates the pipeline, the strategy implementation, no-look-ahead behaviour and signal generation, and gives first indications only.'
+      : '> **RESEARCH BACKTEST — NOT A GUARANTEE OF FUTURE PERFORMANCE.** Indicative broker tick data, a deterministic rules engine and a simulated manual execution. Small samples per timeframe: read the confidence intervals, not the point estimates.',
+    '',
+  );
+  L.push('> **Evidence hierarchy (owner decision, 2026-09-25):** the **Buy Limit** results are the **primary evidence** for timeframe and strategy decisions, because production V1 is Buy Limit only. The PDF market-entry baseline is a **secondary diagnostic** (§ Secondary diagnostic) and is never used on its own to choose a timeframe or strategy.', '');
   L.push(`Generated ${new Date().toISOString().slice(0, 10)} by \`scripts/backtest.ts\`. Default config hash \`${configHash(config)}\`.`, '');
 
   L.push('## Dataset', '');
   L.push(`- **Files (${load.files.length}):** ${load.files.map((f) => `\`${basename(f)}\``).join(', ')}`);
-  L.push(`- **Ticks used:** ${load.ticks.toLocaleString('en-US')}, ${iso(load.firstTime)} → ${iso(load.lastTime)} (UTC). End cut-off (exclusive): **${args.endIso}**.`);
+  L.push(`- **Ticks used:** ${load.ticks.toLocaleString('en-US')}, ${iso(load.firstTime)} → ${iso(load.lastTime)} (UTC), about ${(spanDays / 30.44).toFixed(1)} months. End cut-off (exclusive): **${args.endIso}**.`);
   L.push(`- **Dropped:** ${load.dropped.atOrAfterEnd.toLocaleString('en-US')} at/after the cut-off, ${load.dropped.beforeStart.toLocaleString('en-US')} before start, ${load.dropped.outOfOrder.toLocaleString('en-US')} out-of-order/overlapping.`);
-  L.push(`- **Candles:** ${TIMEFRAMES.map((tf) => `${tf} ${candles[tf].length.toLocaleString('en-US')}`).join(', ')} (Bid OHLC, closed candles only).`);
-  L.push(`- **Warm-up:** the first ${config.indicators.warmupCandles} candles of each timeframe are used only to seed the indicators, so each timeframe's evaluation starts later:`, '');
+  L.push(`- **Candles:** ${TIMEFRAMES.map((tf) => `${tf} ${candles[tf].length.toLocaleString('en-US')}`).join(', ')} (Bid OHLC, closed candles only). The first ${config.indicators.warmupCandles} candles of each timeframe only seed the indicators.`, '');
   L.push('| Timeframe | First evaluated candle (UTC open) | Last evaluated candle | Evaluated candles | Trading days in window |', '|---|---|---|---|---|');
-  for (const s of byVariant('default')) L.push(`| ${s.timeframe} | ${iso(s.firstEvaluatedOpen)} | ${iso(s.lastEvaluatedOpen)} | ${s.evaluated.toLocaleString('en-US')} | ${s.tradingDays} |`);
+  for (const s of def) L.push(`| ${s.timeframe} | ${iso(s.firstEvaluatedOpen)} | ${iso(s.lastEvaluatedOpen)} | ${s.evaluated.toLocaleString('en-US')} | ${s.tradingDays} |`);
   L.push('');
 
-  L.push('## Default configuration — results by timeframe', '');
-  L.push('Execution model (spec §11): the Buy Limit is checked against the Ask at send time, then the daily cap / dedup / cooldown apply, then the trader places it after a simulated delay; it fills if the Ask reaches the entry before the next candle closes. Outcomes use only ticks after the fill. "+2R before −1R" uses the recommended stop; it is a research metric, **not a win rate**.', '');
-  const head = ['Metric', ...byVariant('default').map((s) => s.timeframe)];
-  const row = (label: string, f: (s: RunSummary) => string): string => `| ${label} | ${byVariant('default').map(f).join(' | ')} |`;
+  L.push('## Timeframe comparison — Buy Limit (primary evidence)', '');
+  L.push('Default configuration. The live V1 timeframe is **not locked**; it is to be chosen by comparing these Buy Limit results across 15m, 30m and 1H: signal frequency together with outcome metrics.', '');
+  L.push('Execution model (spec §11):', '');
+  L.push('1. The Buy Limit is checked against the Ask at send time.');
+  L.push('2. The cap, dedup and cooldown are applied.');
+  L.push('3. The trader places the order after the configured delay.');
+  L.push('4. It fills if the Ask reaches the entry before the next candle closes.', '');
+  L.push('Outcome definitions:', '');
+  L.push('- **+2R share:** of trades that resolved, the share reaching +2R before the recommended stop. Break-even at 1:2 is about 33%. It is **not a win rate**.');
+  L.push('- **Expectancy:** mean R per filled trade. Target = +2, stop = realized R (slippage included), unresolved = marked to market at the longest horizon.');
+  L.push('- **Per alert:** the same, but counting unfilled alerts as 0 R.');
+  L.push('- Brackets are **95% intervals**.', '');
+  const head = ['Metric', ...def.map((s) => s.timeframe)];
+  const row = (label: string, f: (s: RunSummary) => string): string => `| ${label} | ${def.map(f).join(' | ')} |`;
   L.push(`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`);
-  L.push(row('Signals (all four rules, in window)', (s) => String(s.signals)));
+  L.push(row('**Frequency**', () => ''));
+  L.push(row('Trading days evaluated', (s) => String(s.tradingDays)));
   L.push(row('Signals per trading day', (s) => n(s.signalsPerDay, 2)));
-  L.push(row('Rejected at send (entry ≥ Ask)', (s) => String(s.alertStatus.entry_not_below_market ?? 0)));
-  L.push(row('Cooldown / capped', (s) => `${s.alertStatus.cooldown ?? 0} / ${s.alertStatus.capped ?? 0}`));
-  L.push(row('Emailed', (s) => String(s.emailed)));
-  L.push(row('Emailed per trading day', (s) => n(s.emailedPerDay, 2)));
+  L.push(row('Emailed alerts per week', (s) => n(s.emailedPerWeek, 2)));
+  L.push(row('Filled trades per week', (s) => n(s.filledPerWeek, 2)));
+  L.push(row('**Funnel**', () => ''));
+  L.push(row('Signals → emailed', (s) => `${s.signals} → ${s.emailed}`));
+  L.push(row('Rejected at send (entry ≥ Ask) / cooldown / capped', (s) => `${s.alertStatus.entry_not_below_market ?? 0} / ${s.alertStatus.cooldown ?? 0} / ${s.alertStatus.capped ?? 0}`));
   L.push(row('Invalid at placement / expired / filled', (s) => `${s.execution.invalid_at_placement ?? 0} / ${s.execution.expired ?? 0} / ${s.filled}`));
   L.push(row('Fill rate (of emailed)', (s) => pct(s.fillRate)));
+  L.push(row('**Outcomes (filled trades)**', () => ''));
   L.push(row('+2R first / −1R first / unresolved', (s) => `${s.twoR.target ?? 0} / ${s.twoR.stop ?? 0} / ${s.twoR.open ?? 0}`));
-  L.push(row('+2R share of resolved', (s) => pct(s.targetShareOfResolved)));
+  L.push(row('+2R share of resolved', (s) => ci(s.targetShare, 0, true)));
+  L.push(row('Expectancy, R per filled trade', (s) => ci(s.expectancyR)));
+  L.push(row('Expectancy, R per emailed alert', (s) => ci(s.expectancyPerAlertR)));
   L.push(row('Stop distance, pips (median / mean)', (s) => dist(s.riskPips)));
   L.push(row('Realized R on stops (median / mean)', (s) => dist(s.stopRealizedR, 2)));
   L.push(row('Stops that slipped / max slippage (pips)', (s) => `${s.slippedStops} / ${n(s.stopSlippagePips.max)}`));
   L.push(row('Lots (median), raised to min lot', (s) => `${n(s.lots.median, 2)}, ${s.raisedToMinLot}`));
+  L.push(row('**Signal mix**', () => ''));
   L.push(row('RSI branch (recovery / above-mid)', (s) => `${s.rsiBranches.recovery ?? 0} / ${s.rsiBranches.above_mid ?? 0}`));
   L.push(row('Pattern (pin / engulfing / both)', (s) => `${s.patterns.pin_bar ?? 0} / ${s.patterns.engulfing ?? 0} / ${s.patterns.both ?? 0}`));
   L.push('');
 
+  L.push('### By year — Buy Limit, default', '');
+  L.push('Stability check: a timeframe whose result depends on one year is weaker evidence.', '');
+  L.push('| Timeframe | Year | Trading days | Signals | Emailed | Filled | +2R / −1R / open | +2R share | Expectancy R / filled trade |', '|---|---|---|---|---|---|---|---|---|');
+  for (const s of def) {
+    for (const y of s.byYear) {
+      L.push(`| ${s.timeframe} | ${y.period} | ${y.tradingDays} | ${y.signals} | ${y.emailed} | ${y.filled} | ${y.target} / ${y.stop} / ${y.open} | ${ci(y.targetShare, 0, true)} | ${ci(y.expectancyR)} |`);
+    }
+  }
+  L.push('');
+
   L.push('### Rule funnel (default, evaluated in-window candles)', '');
   L.push('| Timeframe | In window | + Trend | + Pullback | + RSI | + Candle (signal) | Trend alone | Pullback alone | RSI alone | Candle alone |', '|---|---|---|---|---|---|---|---|---|---|');
-  for (const s of byVariant('default')) {
+  for (const s of def) {
     const f = s.funnel;
     L.push(`| ${s.timeframe} | ${f.inWindow.toLocaleString('en-US')} | ${f.trend} | ${f.trendPullback} | ${f.trendPullbackRsi} | ${f.allFour} | ${pct(s.ruleRates.trend)} | ${pct(s.ruleRates.pullback)} | ${pct(s.ruleRates.rsi)} | ${pct(s.ruleRates.candle)} |`);
   }
   L.push('');
 
-  L.push('### Post-fill price movement (default), pips — median / mean', '');
-  for (const s of byVariant('default')) {
+  L.push('### Post-fill price movement (default Buy Limit), pips — median / mean', '');
+  for (const s of def) {
     if (!s.horizons.length) continue;
     L.push(`**${s.timeframe}**`, '', '| Horizon (candles) | Return | MFE | MAE |', '|---|---|---|---|');
     for (const h of s.horizons) L.push(`| ${h.candles} | ${dist(h.returnPips)} | ${dist(h.mfePips)} | ${dist(h.maePips)} |`);
     L.push('');
   }
 
-  L.push('## Variant comparison (one change at a time)', '');
+  L.push('## Buy Limit variants (one change at a time)', '');
+  L.push('Sensitivity only. With these sample sizes, differences inside overlapping intervals are noise, and choosing the best-looking variant would overfit.', '');
   for (const tf of TIMEFRAMES) {
-    L.push(`### ${tf}`, '', '| Variant | Signals | Emailed | Filled | Fill rate | +2R / −1R / open | +2R share | Median stop (pips) |', '|---|---|---|---|---|---|---|---|');
-    for (const v of variants) {
-      const s = summaries.find((x) => x.variant === v.name && x.timeframe === tf)!;
-      L.push(`| ${v.name} | ${s.signals} | ${s.emailed} | ${s.filled} | ${pct(s.fillRate)} | ${s.twoR.target ?? 0} / ${s.twoR.stop ?? 0} / ${s.twoR.open ?? 0} | ${pct(s.targetShareOfResolved)} | ${n(s.riskPips.median)} |`);
+    L.push(`### ${tf}`, '', '| Variant | Signals | Emailed / week | Filled | Fill rate | +2R / −1R / open | +2R share | Expectancy R / filled trade |', '|---|---|---|---|---|---|---|---|');
+    for (const v of primary) {
+      const s = get(v.name, tf);
+      L.push(`| ${v.name} | ${s.signals} | ${n(s.emailedPerWeek, 2)} | ${s.filled} | ${pct(s.fillRate)} | ${s.twoR.target ?? 0} / ${s.twoR.stop ?? 0} / ${s.twoR.open ?? 0} | ${ci(s.targetShare, 0, true)} | ${ci(s.expectancyR)} |`);
     }
     L.push('');
   }
   L.push('Variants:', '');
-  for (const v of variants) L.push(`- \`${v.name}\`: ${v.description}`);
+  for (const v of primary) L.push(`- \`${v.name}\`: ${v.description}`);
   L.push('');
 
-  L.push('## Emailed alerts (default, H1)', '');
-  const h1 = runs.find((r) => r.variant === 'default' && r.timeframe === 'H1');
-  const emailed = h1?.alerts.filter((a) => a.alertStatus === 'emailed') ?? [];
-  if (!emailed.length) L.push('None.');
-  else {
-    L.push('| Signal close (Dubai) | Pattern | RSI branch | Entry | Rec. stop | Lots | Planned risk | Execution | +2R/−1R | Realized R |', '|---|---|---|---|---|---|---|---|---|---|');
-    for (const a of emailed.slice(0, 60)) {
+  const baseline = variants.find((v) => v.entryModel === 'pdf_market');
+  if (baseline) {
+    L.push('## Secondary diagnostic — PDF market entry (not decision evidence)', '');
+    L.push('Same signals, but entered as the PDF describes: a market buy at the next open, filled at the Ask. This is a **diagnostic only**, for spotting whether the Buy Limit systematically misses winners or catches losers (adverse selection). Production V1 is Buy Limit; do not choose a timeframe or strategy from this table.', '');
+    L.push('| Timeframe | Entry | Filled | +2R / −1R / open | +2R share | Expectancy R / filled trade |', '|---|---|---|---|---|---|');
+    for (const tf of TIMEFRAMES) {
+      for (const [label, name] of [['Buy Limit (primary)', 'default'], ['PDF market (diagnostic)', baseline.name]] as const) {
+        const s = get(name, tf);
+        L.push(`| ${tf} | ${label} | ${s.filled} | ${s.twoR.target ?? 0} / ${s.twoR.stop ?? 0} / ${s.twoR.open ?? 0} | ${ci(s.targetShare, 0, true)} | ${ci(s.expectancyR)} |`);
+      }
+    }
+    L.push('');
+  }
+
+  L.push('## Most recent emailed alerts (default, per timeframe)', '');
+  for (const tf of TIMEFRAMES) {
+    const run = runs.find((r) => r.variant === 'default' && r.timeframe === tf);
+    const emailed = run?.alerts.filter((a) => a.alertStatus === 'emailed') ?? [];
+    L.push(`### ${tf} (${emailed.length} emailed; last 15 shown)`, '');
+    if (!emailed.length) {
+      L.push('None.', '');
+      continue;
+    }
+    L.push('| Signal close (Dubai) | Pattern | RSI | Entry | Rec. stop | Lots | Planned risk | Execution | Result | R |', '|---|---|---|---|---|---|---|---|---|---|');
+    for (const a of emailed.slice(-15)) {
       const p = a.decision.plan!;
       const d = config.instrument.digits;
       const c = local(a.decision.closeTime);
-      L.push(`| ${c.date} ${String(Math.floor(c.minuteOfDay / 60)).padStart(2, '0')}:${String(c.minuteOfDay % 60).padStart(2, '0')} | ${a.decision.candle.patterns.join('+')} | ${a.decision.rsiCheck.branch} | ${formatPoints(p.entry, d)} | ${formatPoints(p.refSl, d)} | ${p.sizing.lots.toFixed(2)} | $${p.sizing.plannedRiskUsd.toFixed(2)} (${p.sizing.plannedRiskPct.toFixed(2)}%) | ${a.execution?.status ?? '—'} | ${a.outcome?.twoR ?? '—'} | ${a.outcome?.realizedR == null ? '—' : a.outcome.realizedR.toFixed(2)} |`);
+      L.push(`| ${c.date} ${String(Math.floor(c.minuteOfDay / 60)).padStart(2, '0')}:${String(c.minuteOfDay % 60).padStart(2, '0')} | ${a.decision.candle.patterns.join('+')} | ${a.decision.rsiCheck.branch} | ${formatPoints(p.entry, d)} | ${formatPoints(p.refSl, d)} | ${p.sizing.lots.toFixed(2)} | $${p.sizing.plannedRiskUsd.toFixed(2)} | ${a.execution?.status ?? '—'} | ${a.outcome?.twoR ?? '—'} | ${a.outcome?.rMultiple == null ? '—' : a.outcome.rMultiple.toFixed(2)} |`);
     }
-    if (emailed.length > 60) L.push('', `…and ${emailed.length - 60} more (see the JSON output).`);
+    L.push('');
   }
-  L.push('');
 
   L.push('## Caveats', '');
-  L.push('- **Partial year, one regime.** Results come from part of 2026 only, after warm-up. They are not a full 12-month test and are not conclusive performance evidence.');
-  L.push('- **Indicative data.** Exness describes its tick history as indicative. Execution on a live Standard account can differ.');
-  L.push('- **No price improvement is modelled** on Buy Limit fills, and the trader is assumed to place the order after the configured delay exactly as emailed.');
-  L.push('- **Planned vs realized risk.** Stops exit at the first Bid at or below the stop, so gap slippage is included; commission is 0 per the Standard USD config.');
-  L.push('- **Variants are one-at-a-time** around the approved defaults. Looking at many variants on the same short dataset invites overfitting; treat differences as hypotheses.');
-  L.push('- **The 2026-09-25 file is excluded** by the cut-off; it is the separate one-day loader-validation file.');
+  if (spanDays < 365) L.push('- **Partial year.** This is not a full 12-month test and is not conclusive performance evidence.');
+  L.push('- **Indicative data.** Exness describes its tick history as indicative, so execution on a live Standard account can differ. The account variant must match the trading account.');
+  L.push('- **Execution assumptions.** No price improvement on Buy Limit fills. The trader is assumed to place each order exactly as emailed after the configured delay, and to set the recommended stop.');
+  L.push('- **Planned vs realized risk.** Stops exit at the first Bid at or below the stop, so gap slippage is included. Commission is 0 per the Standard USD config.');
+  L.push('- **Multiple comparisons.** Many variants and three timeframes on the same data: treat the best-looking cell as a hypothesis to re-test, not a finding.');
   L.push('');
 
   await mkdir(dirname(args.out), { recursive: true });

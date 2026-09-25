@@ -75,6 +75,7 @@ npm test            # vitest
 npm run typecheck   # tsc --noEmit
 npm run validate:ticks -- data/raw/Exness_EURUSD_2026_09.zip   # tick-data report
 npm run backtest:2026      # preliminary backtest → docs/backtest/2026-preliminary.md
+npm run backtest:all       # 2024-01 → 2026-09-24 → docs/backtest/2024-2026.md
 ```
 
 ## Data
@@ -95,6 +96,8 @@ npm run backtest:2026      # preliminary backtest → docs/backtest/2026-prelimi
 - The EMA needs `warmupCandles = 1000` to be independent of its seed.
 - PDF lot-size fixture: $1,000 at 1% risk, entry 1.0860, SL 1.0840 (20 pips) → 0.05 lots.
 - **Commission (P5):** lots = risk$ / (SL pips × pipValuePerLot + commissionPerLotRoundTrip). The value 0 is valid **only** for the approved Standard USD account. Never assume an Exness commission figure.
+- **Evidence hierarchy (D7):** Buy Limit results are the primary evidence. The PDF market entry is a secondary diagnostic only; never choose a timeframe or strategy from it.
+- **Live timeframe (D8):** not locked. Keep testing 15m/30m/1H and always report frequency together with the outcome metrics (fills/week, fill rate, +2R share and expectancy R with 95% intervals, per-year breakdown). The owner decides.
 - **Entry (P4/P6):** production is **always a Buy Limit**. The PDF's market-at-next-open entry exists only as a backtest baseline (`backtest.includePdfMarketBaseline`), filled at the **Ask**. A long's stop triggers on the **Bid**.
 - **The email shows the reference stop as "Recommended stop — set manually" (P7).** The system never places or manages it.
 - **Risk is always *planned* risk** (entry − reference stop at the planned lot size); never call it "actual". The realized loss can exceed it through stop slippage (gaps/news) or manual placement differences. The backtest measures realized R vs planned R using tick data (spec §9, §11).

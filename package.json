@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "validate:ticks": "tsx scripts/validate-ticks.ts",
     "backtest": "tsx scripts/backtest.ts",
-    "backtest:2026": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2026-preliminary.md --json data/backtest/2026-preliminary.json --title 'Preliminary backtest: EUR/USD 2026-01-01 to 2026-09-24 (partial year)'"
+    "backtest:2026": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2026-preliminary.md --json data/backtest/2026-preliminary.json --title 'Preliminary backtest: EUR/USD 2026-01-01 to 2026-09-24 (partial year)'",
+    "backtest:all": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2024*.zip docs/data/Exness_EURUSD_2025*.zip docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2024-2026.md --json data/backtest/2024-2026.json --title 'Backtest: EUR/USD 2024-01 to 2026-09-24'"
   },
   "dependencies": {
     "yaml": "^2.9.1",

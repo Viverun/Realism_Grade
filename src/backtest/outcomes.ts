@@ -21,6 +21,11 @@ export interface Outcome {
   /** For 'stop': refSl − exit Bid in pips (> 0 means the stop slipped). */
   stopSlippagePips: number | null;
   exitTime: number | null;
+  /**
+   * Trade result in R for expectancy: +2 at the target, realizedR at the stop, and for
+   * 'open' the mark-to-market (last Bid − fill)/R at the longest horizon (null if the data ended first).
+   */
+  rMultiple: number | null;
 }
 
 export function measureOutcome(
@@ -69,6 +74,7 @@ export function measureOutcome(
     }
   }
   const dataEnded = k >= store.length;
+  const lastBidInWindow = store.bid(Math.max(fill.index, k - 1));
   while (h < sorted.length) {
     const lastBid = store.bid(Math.max(fill.index, k - 1));
     horizons.push({
@@ -79,5 +85,11 @@ export function measureOutcome(
     });
     h += 1;
   }
-  return { horizons, twoR, realizedR, stopSlippagePips, exitTime };
+  let rMultiple: number | null = null;
+  if (riskPoints > 0) {
+    if (twoR === 'target') rMultiple = 2;
+    else if (twoR === 'stop') rMultiple = realizedR;
+    else if (!dataEnded) rMultiple = (lastBidInWindow - fill.price) / riskPoints;
+  }
+  return { horizons, twoR, realizedR, stopSlippagePips, exitTime, rMultiple };
 }

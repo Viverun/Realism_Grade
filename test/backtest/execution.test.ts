@@ -62,6 +62,7 @@ describe('outcomes (spec §11 step 5)', () => {
     const o = measureOutcome(st, { index: 0, price: 113_690 }, 113_590, horizons, 10);
     expect(o.twoR).toBe('target');
     expect(o.realizedR).toBeNull();
+    expect(o.rMultiple).toBe(2);
     expect(o.horizons[0]).toMatchObject({ horizonCandles: 1, returnPips: 11, mfePips: 11, maePips: 4 });
     expect(o.horizons[1]).toMatchObject({ horizonCandles: 2, returnPips: 20.5, mfePips: 20.5 });
   });
@@ -72,6 +73,7 @@ describe('outcomes (spec §11 step 5)', () => {
     expect(o.twoR).toBe('stop');
     expect(o.realizedR).toBeCloseTo(-1.3, 10); // exit Bid 113_560 vs planned stop 113_590
     expect(o.stopSlippagePips).toBe(3);
+    expect(o.rMultiple).toBeCloseTo(-1.3, 10);
     expect(o.exitTime).toBe(s(700));
   });
 
@@ -80,5 +82,13 @@ describe('outcomes (spec §11 step 5)', () => {
     const o = measureOutcome(st, { index: 0, price: 113_690 }, 113_590, horizons, 10);
     expect(o.twoR).toBe('open');
     expect(o.horizons.map((h) => h.returnPips)).toEqual([null, null]);
+    expect(o.rMultiple).toBeNull(); // data ended before the longest horizon
+  });
+
+  it('marks an unresolved trade to market at the longest horizon', () => {
+    const st = store([[0, 113_685, 113_690], [600, 113_700, 113_708], [7000, 113_740, 113_748], [7300, 113_800, 113_808]]);
+    const o = measureOutcome(st, { index: 0, price: 113_690 }, 113_590, horizons, 10);
+    expect(o.twoR).toBe('open');
+    expect(o.rMultiple).toBeCloseTo(0.5, 10); // (113_740 − 113_690) / 100 at the 2-candle horizon
   });
 });
