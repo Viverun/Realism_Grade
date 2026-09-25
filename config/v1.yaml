@@ -82,6 +82,7 @@ selection:               # V1.1 daily selector (owner decision D9: exactly 3 ale
   mode: signals          # [POLICY] signals = V1 behaviour | daily_top3 = V1.1 (only after the holdout gate)
   timeframes: [M5, M15, M30, H1]   # [ENG] candidate timeframes for daily_top3
   immediateMinScore: 4   # [ENG] a candidate with this many of the 4 rules is sent at once (4 = full V1 signal)
+  fallback: true         # [POLICY] true = fill every slot (D9); false = Ahmad's full setup only (D10), slots may stay empty
   weekdays: [1, 2, 3, 4, 5]        # [POLICY] trading days (local weekday, 0 = Sunday)
   slots:                 # [POLICY] one alert per slot, local time (alerts.timezone)
     - { start: "08:00", end: "13:00" }

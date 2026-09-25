@@ -21,6 +21,8 @@ export interface SelectionSummary {
   slots: number;
   alerts: number;
   missed: number;
+  /** Slots with no full setup while fallback is off. */
+  noSetup: number;
   alertsPerDay: number;
   immediate: number;
   fallback: number;
@@ -73,7 +75,8 @@ export function summariseSelection(run: SelectionRun, fromMs = -Infinity, toMs =
     tradingDays: days,
     slots: alerts.length,
     alerts: sent.length,
-    missed: alerts.length - sent.length,
+    missed: alerts.filter((a) => a.selection.kind === 'missed').length,
+    noSetup: alerts.filter((a) => a.selection.kind === 'none').length,
     alertsPerDay: days ? sent.length / days : 0,
     immediate: alerts.filter((a) => a.selection.kind === 'immediate').length,
     fallback: alerts.filter((a) => a.selection.kind === 'fallback').length,

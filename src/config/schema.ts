@@ -128,6 +128,8 @@ export const configSchema = z
         mode: z.enum(['signals', 'daily_top3']),
         timeframes: z.array(timeframeEnum).nonempty(),
         immediateMinScore: z.number().int().min(0).max(4),
+        /** false = full setup only: no slot-end fallback, so only immediate (score ≥ immediateMinScore) alerts. */
+        fallback: z.boolean(),
         weekdays: z.array(z.number().int().min(0).max(6)).nonempty(),
         slots: z.array(selectionSlot).nonempty(),
       })

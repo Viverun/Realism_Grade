@@ -40,7 +40,7 @@ describe('config/v1.yaml', () => {
 
   it('V1.1 selection defaults to V1 behaviour and validates slots', async () => {
     const config = await loadConfig(CONFIG_PATH);
-    expect(config.selection).toMatchObject({ mode: 'signals', immediateMinScore: 4, weekdays: [1, 2, 3, 4, 5] });
+    expect(config.selection).toMatchObject({ mode: 'signals', immediateMinScore: 4, fallback: true, weekdays: [1, 2, 3, 4, 5] });
     expect(config.selection.slots).toHaveLength(3);
     const raw = await rawConfig();
     raw.selection.slots = [{ start: '08:00', end: '14:00' }, { start: '13:00', end: '18:00' }];
