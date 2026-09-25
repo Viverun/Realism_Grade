@@ -318,12 +318,14 @@ The backtest measures the stop-slippage component (§11). The email and the log 
 | Cap | `maxAlertsPerDay = 3`, counted across the whole system | [POLICY] |
 | Over the cap | **Chronological first three**, by signal-candle close time. Later signals are logged `capped`. | [POLICY] |
 | Signal ID | `EURUSD|<timeframe>|<signal candle open time, UTC ISO>`. Emailed at most once, including across restarts. | [POLICY] |
-| Cooldown | After an **emailed** alert on a timeframe, no alert on that timeframe for `cooldownCandles = 3` candles. Skipped candles are logged `cooldown`. | [POLICY, D4] |
+| Cooldown | After an **emailed** alert on a timeframe, no alert on that timeframe for `cooldownCandles = 3` candle-durations: blocked while `openTime − lastAlertOpenTime ≤ cooldownCandles × timeframe`. It is time-based so it is identical in live and backtest regardless of how much history is loaded; a weekend gap does not extend it. Skipped signals are logged `cooldown`. | [POLICY, D4] |
 | Live timeframe | Live mode runs **one** timeframe, chosen from the backtest. The backtest runs 15m, 30m and 1H independently. | [POLICY] |
 
 ---
 
 ## 11. Backtest execution model
+
+**Initial dataset:** 2026 only (Jan → 2026-09-24, partial year); see `docs/v1/backtest-dataset-2026.md`. Its results are preliminary, not conclusive.
 
 This section applies the live-price validation to historical data. The preferred data is **Exness historical Bid/Ask ticks** (exness.com/tick-history; indicative data), which lets execution assumptions be checked against Exness's own prices. Third-party candle data can be used for signal counts, but fill results from it are marked **approximate**.
 
@@ -357,17 +359,17 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
 |---|---|---|
 | **NL1** | **Indicator prefix invariance:** EMA/RSI at index `k` computed on `closes[0..k]` equals the value at `k` computed on the full series. | 3 ✅ |
 | **NL2** | **Closed candles only:** the tick aggregator and resampler never emit a candle with `closeTime > asOf`. Appending ticks at or after `asOf` doesn't change the emitted candles. A higher-TF bucket whose close time is after `asOf` is not emitted, even if some of its M15 candles already exist. | 2 ✅ |
-| **NL3** | **Decision prefix invariance:** for every `i`, `evaluate(candles[0..i])` equals the record at `i` from a full-history run. | 5 |
-| **NL4** | **Future perturbation:** randomly rewriting every candle after `i` leaves the decision at `i` byte-identical. | 5 |
-| **NL5** | **Prior move precedes the touch:** the only candle with `high − EMA50 ≥ minSwing` is at or after the first touch `t` → PULLBACK fails. The same candle moved to `t − 1` → passes. | 4 |
-| **NL6** | **The signal candle can't create the prior move:** a large engulfing signal candle whose high exceeds `EMA50 + minSwing`, with no earlier extension → fails. | 4 |
-| **NL7** | **Touch after the signal is ignored:** a touch only at `i+1` → fails at `i` (also covered by NL3). | 4 |
-| **NL8** | **RSI window is bounded:** a dip to ≤ oversold at `i − rsiLookback − 1` → the recovery branch fails; at `i − rsiLookback` → passes. | 4 |
-| **NL9** | **Stream equals batch:** a candle-by-candle live-path replay (with dedup/cap/cooldown state) produces the same decision log as the batch backtest. | 9 |
-| **NL10** | **Cap/cooldown causality:** deleting a later signal on the same day never changes the status of an earlier one. | 9 |
-| **NL11** | **Execution causality:** send-time and placement checks and fill search use only ticks at or after `closeTime[i]` / `P`. Fixture: the signal candle's own low is below ENTRY but later ticks never reach it → `expired`, not filled. | 6 |
-| **NL12** | **Outcome isolation:** decision records contain no outcome fields. The strategy module does not import the backtest/outcome module (checked by a test on the import graph). | 6 |
-| **T1** | **Window boundaries:** closes at 08:00 and 23:00 Dubai are in; 07:45 and 23:15 are out. | 5 |
+| **NL3** | **Decision prefix invariance:** for every `i`, `evaluate(candles[0..i])` equals the record at `i` from a full-history run. | 5 ✅ |
+| **NL4** | **Future perturbation:** randomly rewriting every candle after `i` leaves the decision at `i` byte-identical. | 5 ✅ |
+| **NL5** | **Prior move precedes the touch:** the only candle with `high − EMA50 ≥ minSwing` is at or after the first touch `t` → PULLBACK fails. The same candle moved to `t − 1` → passes. | 4 ✅ |
+| **NL6** | **The signal candle can't create the prior move:** a large engulfing signal candle whose high exceeds `EMA50 + minSwing`, with no earlier extension → fails. | 4 ✅ |
+| **NL7** | **Touch after the signal is ignored:** a touch only at `i+1` → fails at `i` (also covered by NL3). | 4 ✅ |
+| **NL8** | **RSI window is bounded:** a dip to ≤ oversold at `i − rsiLookback − 1` → the recovery branch fails; at `i − rsiLookback` → passes. | 4 ✅ |
+| **NL9** | **Stream equals batch:** a candle-by-candle live-path replay (`decideAt` on each prefix + `AlertPolicy`) produces the same alert log as the batch path (`decideAll` + `AlertPolicy`). | 9 ✅ |
+| **NL10** | **Cap/cooldown causality:** deleting a later signal on the same day never changes the status of an earlier one. | 9 ✅ |
+| **NL11** | **Execution causality:** send-time and placement checks and fill search use only ticks at or after `closeTime[i]` / `P`. Fixture: the signal candle's own low is below ENTRY but later ticks never reach it → `expired`, not filled. | 6 ✅ |
+| **NL12** | **Outcome isolation:** decision records contain no outcome fields. The strategy module does not import the backtest/outcome module (checked by a test on the import graph). | 6 ✅ |
+| **T1** | **Window boundaries:** closes at 08:00 and 23:00 Dubai are in; 07:45 and 23:15 are out. | 5 ✅ |
 
 ---
 
@@ -395,6 +397,16 @@ For each signal on candle `i` (decision already made from `candles[0..i]`):
 ```
 
 `configHash` ties every decision to the exact parameter set that produced it.
+
+**Status layers (kept separate for NL12).** The implementation logs three layers, each produced strictly after the previous one:
+
+| Layer | Produced by | Values |
+|---|---|---|
+| Decision | `src/strategy/engine.ts` (pure, candles only) | `warmup`, `no_signal`, `outside_window`, `signal`, `invalid_risk_geometry` (V4), `risk_exceeds_max` (V5) |
+| Alert | send-time check (§8 V1–V3) + `src/alerts/policy.ts` (V6) | `entry_not_below_market`, `no_data`, `duplicate`, `cooldown`, `capped`, `emailed` (plus live-only `stale_signal`, `no_quote`) |
+| Execution (backtest only) | `src/backtest/execution.ts` | `invalid_at_placement`, `expired`, `filled`, `no_data` |
+
+The combined `status` in the example above is the most advanced layer reached.
 
 ---
 

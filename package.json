@@ -12,7 +12,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate:ticks": "tsx scripts/validate-ticks.ts"
+    "validate:ticks": "tsx scripts/validate-ticks.ts",
+    "backtest": "tsx scripts/backtest.ts",
+    "backtest:2026": "tsx scripts/backtest.ts docs/data/Exness_EURUSD_2026_0?.zip --end 2026-09-25T00:00:00Z --out docs/backtest/2026-preliminary.md --json data/backtest/2026-preliminary.json --title 'Preliminary backtest: EUR/USD 2026-01-01 to 2026-09-24 (partial year)'"
   },
   "dependencies": {
     "yaml": "^2.9.1",
