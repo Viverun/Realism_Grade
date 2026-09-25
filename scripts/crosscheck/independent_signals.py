@@ -10,9 +10,10 @@ Used to cross-check the TypeScript engine's signals on real data.
 """
 import io, sys, zipfile, datetime as dt
 
-TF_MIN = {"M15": 15, "M30": 30, "H1": 60}
+TF_MIN = {"M5": 5, "M15": 15, "M30": 30, "H1": 60}
 # Default config/v1.yaml values (points: 1 pip = 10 points)
 P = {
+    "M5": dict(tol=15, swing=60, rng=20),
     "M15": dict(tol=20, swing=80, rng=30),
     "M30": dict(tol=30, swing=100, rng=40),
     "H1": dict(tol=50, swing=150, rng=50),
@@ -28,7 +29,7 @@ def parse_ts(s):
     s = s.strip('"')
     return int(dt.datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.timezone.utc).timestamp() * 1000) + int(s[20:23])
 
-def load_m15(files, end_ms):
+def load_m5(files, end_ms):
     candles = {}  # open_ms -> [o,h,l,c]
     order = []
     for f in sorted(files):
@@ -42,7 +43,7 @@ def load_m15(files, end_ms):
                         if t >= end_ms:
                             continue
                         bid = round(float(parts[3]) * 100000)
-                        b = t - t % (15 * 60000)
+                        b = t - t % (5 * 60000)
                         c = candles.get(b)
                         if c is None:
                             candles[b] = [bid, bid, bid, bid]
@@ -51,14 +52,14 @@ def load_m15(files, end_ms):
                             if bid > c[1]: c[1] = bid
                             if bid < c[2]: c[2] = bid
                             c[3] = bid
-    # Sort by bucket time: some exports write whole days out of order; a 15-minute bucket never
+    # Sort by bucket time: some exports write whole days out of order; a 5-minute bucket never
     # spans two days, so each bucket's OHLC is already correct in file order.
     return [(b, *candles[b]) for b in sorted(candles)]
 
-def resample(m15, minutes):
+def resample(base, minutes):
     out, cur = [], None
     size = minutes * 60000
-    for b, o, h, l, c in m15:
+    for b, o, h, l, c in base:
         k = b - b % size
         if cur and cur[0] == k:
             cur[2] = max(cur[2], h); cur[3] = min(cur[3], l); cur[4] = c
@@ -128,8 +129,8 @@ if __name__ == "__main__":
     end = args[args.index("--end") + 1]
     files = [a for a in args if a.endswith(".zip")]
     end_ms = int(dt.datetime.fromisoformat(end.replace("Z", "+00:00")).timestamp() * 1000)
-    m15 = load_m15(files, end_ms)
-    series = {"M15": m15, "M30": resample(m15, 30), "H1": resample(m15, 60)}
-    for tf in ("M15", "M30", "H1"):
+    m5 = load_m5(files, end_ms)
+    series = {"M5": m5, "M15": resample(m5, 15), "M30": resample(m5, 30), "H1": resample(m5, 60)}
+    for tf in ("M5", "M15", "M30", "H1"):
         for s in signals(series[tf], tf):
             print(f"EURUSD|{tf}|{s}")

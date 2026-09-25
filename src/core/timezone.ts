@@ -53,7 +53,25 @@ export function makeLocalClock(timeZone: string): (utcMs: number) => LocalTime {
   };
 }
 
-/** Parses "HH:MM" into minutes since midnight. */
+/**
+ * Local calendar date + minutes since local midnight → UTC ms (inverse of makeLocalClock).
+ * `minuteOfDay` may be 1440 ("24:00" = next local midnight).
+ */
+export function makeUtcFromLocal(timeZone: string): (date: string, minuteOfDay: number) => number {
+  const clock = makeLocalClock(timeZone);
+  const localMs = (utcMs: number): number => {
+    const t = clock(utcMs);
+    return Date.parse(`${t.date}T00:00:00Z`) + t.minuteOfDay * 60_000;
+  };
+  return (date: string, minuteOfDay: number): number => {
+    const wanted = Date.parse(`${date}T00:00:00Z`) + minuteOfDay * 60_000;
+    let utc = wanted - (localMs(wanted) - wanted);
+    utc = wanted - (localMs(utc) - utc);
+    return utc;
+  };
+}
+
+/** Parses "HH:MM" (or "24:00") into minutes since midnight. */
 export function clockToMinutes(clock: string): number {
   const match = /^(\d{2}):(\d{2})$/.exec(clock);
   if (!match) throw new Error(`Invalid clock time: ${clock}`);

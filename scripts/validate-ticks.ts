@@ -134,7 +134,7 @@ async function main(): Promise<void> {
 
   const overlapSkipped = dropped.outOfOrder;
   const asOf = combined.length ? combined.timeAt(combined.length - 1) : 0;
-  let candles: Record<Timeframe, Candle[]> = { M15: [], M30: [], H1: [] };
+  let candles: Record<Timeframe, Candle[]> = { M5: [], M15: [], M30: [], H1: [] };
   let candleError: string | null = null;
   try {
     if (combined.length) candles = combined.buildCandles(asOf);

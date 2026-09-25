@@ -4,6 +4,14 @@ const nonNegative = z.number().finite().nonnegative();
 const positive = z.number().finite().positive();
 const positiveInt = z.number().int().positive();
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
+const slotEnd = z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|24:00)$/, 'expected HH:MM or 24:00');
+const minutes = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const timeframeEnum = z.enum(['M5', 'M15', 'M30', 'H1']);
+const selectionSlot = z
+  .object({ start: clock, end: slotEnd })
+  .strict()
+  .refine((s) => minutes(s.start) < minutes(s.end), { message: 'slot start must be before end' })
+  .refine((s) => minutes(s.start) % 5 === 0 && minutes(s.end) % 5 === 0, { message: 'slot times must be multiples of 5 minutes' });
 
 /** Hard limit from the PDF: never risk more than 2% per trade. */
 export const PDF_MAX_RISK_PERCENT = 2;
@@ -83,7 +91,7 @@ export const configSchema = z
             requireBullishBody: z.boolean(),
           })
           .strict(),
-        timeframes: z.object({ M15: timeframeParams, M30: timeframeParams, H1: timeframeParams }).strict(),
+        timeframes: z.object({ M5: timeframeParams, M15: timeframeParams, M30: timeframeParams, H1: timeframeParams }).strict(),
       })
       .strict(),
     entry: z
@@ -101,7 +109,7 @@ export const configSchema = z
         maxPerDay: z.number().int().nonnegative(),
         overCapRule: z.literal('chronological'),
         cooldownCandles: z.number().int().nonnegative(),
-        liveTimeframe: z.enum(['M15', 'M30', 'H1']),
+        liveTimeframe: z.enum(['M5', 'M15', 'M30', 'H1']),
       })
       .strict()
       .refine((a) => a.windowStart < a.windowEnd, { message: 'windowStart must be before windowEnd' }),
@@ -115,6 +123,26 @@ export const configSchema = z
         assumedSpreadPips: nonNegative,
       })
       .strict(),
+    selection: z
+      .object({
+        mode: z.enum(['signals', 'daily_top3']),
+        timeframes: z.array(timeframeEnum).nonempty(),
+        immediateMinScore: z.number().int().min(0).max(4),
+        weekdays: z.array(z.number().int().min(0).max(6)).nonempty(),
+        slots: z.array(selectionSlot).nonempty(),
+      })
+      .strict()
+      .refine(
+        (s) => s.slots.every((slot, k) => k === 0 || minutes(s.slots[k - 1]!.end) <= minutes(slot.start)),
+        { message: 'slots must be ascending and non-overlapping', path: ['slots'] },
+      )
+      .refine(
+        (s) => {
+          const step = Math.min(...s.timeframes.map((tf) => ({ M5: 5, M15: 15, M30: 30, H1: 60 })[tf]));
+          return s.slots.every((slot) => minutes(slot.start) % step === 0 && minutes(slot.end) % step === 0);
+        },
+        { message: 'slot times must be multiples of the smallest selected timeframe', path: ['slots'] },
+      ),
     backtest: z
       .object({
         placementDelaySec: nonNegative,

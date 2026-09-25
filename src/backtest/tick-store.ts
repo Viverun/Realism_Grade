@@ -1,4 +1,4 @@
-import type { Timeframe } from '../core/timeframe.js';
+import { TIMEFRAMES, type Timeframe } from '../core/timeframe.js';
 import type { Candle, Tick } from '../core/types.js';
 import { readExnessTickFile } from '../data/exness-ticks.js';
 import { resampleCandles } from '../data/resample.js';
@@ -177,19 +177,24 @@ export class TickStore {
     return { store, summary };
   }
 
-  /** Closed M15/M30/H1 candles as of `asOfMs` (normally the dataset's exclusive end). */
+  /** Closed M5/M15/M30/H1 candles as of `asOfMs` (normally the dataset's exclusive end). M5 is the base. */
   buildCandles(asOfMs: number): Record<Timeframe, Candle[]> {
-    const aggregator = new TickAggregator('M15');
-    const m15: Candle[] = [];
+    const aggregator = new TickAggregator('M5');
+    const m5: Candle[] = [];
     for (const tick of this.ticks()) {
       if (tick.time >= asOfMs) break;
       const closed = aggregator.push(tick);
-      if (closed) m15.push(closed);
+      if (closed) m5.push(closed);
     }
     const tail = aggregator.flush(asOfMs);
-    if (tail) m15.push(tail);
-    const result = { M15: m15, M30: resampleCandles(m15, 'M30', asOfMs), H1: resampleCandles(m15, 'H1', asOfMs) };
-    for (const tf of ['M15', 'M30', 'H1'] as const) assertValidCandles(result[tf], tf);
+    if (tail) m5.push(tail);
+    const result: Record<Timeframe, Candle[]> = {
+      M5: m5,
+      M15: resampleCandles(m5, 'M15', asOfMs),
+      M30: resampleCandles(m5, 'M30', asOfMs),
+      H1: resampleCandles(m5, 'H1', asOfMs),
+    };
+    for (const tf of TIMEFRAMES) assertValidCandles(result[tf], tf);
     return result;
   }
 }

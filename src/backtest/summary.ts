@@ -1,3 +1,4 @@
+import { seededRandom } from '../core/random.js';
 import { makeLocalClock } from '../core/timezone.js';
 import type { TimeframeRun } from './runner.js';
 
@@ -37,6 +38,28 @@ export function wilson(k: number, n: number, z = 1.96): Interval {
   const centre = (p + (z * z) / (2 * n)) / d;
   const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
   return { value: p, low: centre - half, high: centre + half, n };
+}
+
+/**
+ * Percentile-bootstrap 95% interval for mean(a) − mean(b), with a seeded PRNG so reports are
+ * reproducible.
+ */
+export function bootstrapMeanDiff(a: readonly number[], b: readonly number[], seed = 20260925, iterations = 10_000): Interval {
+  if (!a.length || !b.length) return { value: null, low: null, high: null, n: a.length + b.length };
+  const random = seededRandom(seed);
+  const mean = (xs: readonly number[]): number => xs.reduce((s, v) => s + v, 0) / xs.length;
+  const draw = (xs: readonly number[]): number => {
+    let sum = 0;
+    for (let k = 0; k < xs.length; k++) sum += xs[Math.floor(random() * xs.length)]!;
+    return sum / xs.length;
+  };
+  const diffs = Float64Array.from({ length: iterations }, () => draw(a) - draw(b)).sort();
+  return {
+    value: mean(a) - mean(b),
+    low: diffs[Math.floor(0.025 * iterations)]!,
+    high: diffs[Math.ceil(0.975 * iterations) - 1]!,
+    n: a.length + b.length,
+  };
 }
 
 /** Mean with a normal-approximation 95% interval (sample standard deviation). */

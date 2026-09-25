@@ -8,8 +8,8 @@ import { TickAggregator } from './tick-aggregator.js';
 import { assertValidCandles } from './validate.js';
 
 /**
- * Backtest CandleSource built from Exness tick files. Ticks are aggregated to M15
- * (Bid + Ask OHLC); M30/H1 are resampled from M15, which is exact for OHLC.
+ * Backtest CandleSource built from Exness tick files. Ticks are aggregated to M5
+ * (Bid + Ask OHLC); M15/M30/H1 are resampled from M5, which is exact for OHLC.
  * `dataEndMs` is the time up to which the files are complete (e.g. month end):
  * no candle closing after it is ever produced.
  */
@@ -25,7 +25,7 @@ export class ExnessTickCandleSource implements CandleSource {
 
   private async loadBase(): Promise<Candle[]> {
     if (this.base) return this.base;
-    const aggregator = new TickAggregator('M15');
+    const aggregator = new TickAggregator('M5');
     const candles: Candle[] = [];
     for (const file of this.files) {
       for await (const tick of readExnessTickFile(file, this.digits)) {
@@ -36,14 +36,14 @@ export class ExnessTickCandleSource implements CandleSource {
     }
     const last = aggregator.flush(this.dataEndMs);
     if (last) candles.push(last);
-    assertValidCandles(candles, 'M15');
+    assertValidCandles(candles, 'M5');
     this.base = candles;
     return candles;
   }
 
   async getClosedCandles(request: CandleRequest): Promise<Candle[]> {
     const base = await this.loadBase();
-    let candles = request.timeframe === 'M15' ? base : this.derived.get(request.timeframe);
+    let candles = request.timeframe === 'M5' ? base : this.derived.get(request.timeframe);
     if (!candles) {
       candles = resampleCandles(base, request.timeframe, this.dataEndMs);
       this.derived.set(request.timeframe, candles);
